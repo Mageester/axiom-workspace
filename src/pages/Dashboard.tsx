@@ -1,33 +1,42 @@
 import { useState, useMemo } from "react";
 import { Plus, RefreshCw, Loader2 } from "lucide-react";
-import type { LiveRepo, RepoStatus } from "../types";
+import type { LiveRepo, RepoStatus, WorkSession } from "../types";
 import { RepoCard } from "../components/RepoCard";
 import { StatusBadge } from "../components/StatusBadge";
 import { PageHeader } from "../components/PageHeader";
 import { StatCard } from "../components/StatCard";
 import { AddRepoModal } from "../components/AddRepoModal";
+import { StartSessionModal } from "../components/StartSessionModal";
 import { secondaryBtnClass, primaryBtnClass } from "../lib/constants";
+import type { CreateSessionInput } from "../lib/sessions";
 
 interface DashboardProps {
   repos: LiveRepo[];
+  activeSessions: WorkSession[];
   loading: boolean;
   refreshingPaths: Set<string>;
   onRefreshAll: () => Promise<void>;
   onRefreshRepo: (path: string) => Promise<void>;
   onAddRepo: (path: string) => Promise<LiveRepo>;
   onRemoveRepo: (path: string) => void;
+  onStartSession: (input: CreateSessionInput) => void;
+  getRepoSessions: (repo: LiveRepo) => WorkSession[];
 }
 
 export function Dashboard({
   repos,
+  activeSessions,
   loading,
   refreshingPaths,
   onRefreshAll,
   onRefreshRepo,
   onAddRepo,
   onRemoveRepo,
+  onStartSession,
+  getRepoSessions,
 }: DashboardProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
 
   const counts = useMemo(
     () =>
@@ -40,6 +49,14 @@ export function Dashboard({
       ),
     [repos],
   );
+  const cleanRepos = repos.filter((repo) => repo.status === "clean").length;
+  const warningRepos = repos.filter(
+    (repo) =>
+      repo.status === "dirty" ||
+      repo.status === "behind" ||
+      repo.status === "locked",
+  ).length;
+  const errorRepos = counts.error ?? 0;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -72,6 +89,13 @@ export function Dashboard({
       />
 
       <main className="p-8">
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <StatCard label="Total Repos" value={repos.length} />
+          <StatCard label="Clean Repos" value={cleanRepos} />
+          <StatCard label="Warnings / Errors" value={warningRepos + errorRepos} />
+          <StatCard label="Active Sessions" value={activeSessions.length} />
+        </div>
+
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-4">
             <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
@@ -114,18 +138,14 @@ export function Dashboard({
                   key={repo.path}
                   repo={repo}
                   refreshing={refreshingPaths.has(repo.path)}
+                  activeSessions={getRepoSessions(repo)}
                   onRefresh={() => onRefreshRepo(repo.path)}
                   onRemove={() => onRemoveRepo(repo.path)}
+                  onStartSession={() => setSessionRepo(repo)}
                 />
               ))}
             </div>
           )}
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard label="Total Repos" value={repos.length} />
-          <StatCard label="Dirty Repos" value={counts.dirty ?? 0} />
-          <StatCard label="Behind Repos" value={counts.behind ?? 0} />
         </div>
       </main>
 
@@ -133,6 +153,17 @@ export function Dashboard({
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={onAddRepo}
+      />
+      <StartSessionModal
+        open={sessionRepo !== null}
+        repos={repos}
+        activeSessions={activeSessions}
+        initialRepo={sessionRepo}
+        onClose={() => setSessionRepo(null)}
+        onCreate={(input) => {
+          onStartSession(input);
+          setSessionRepo(null);
+        }}
       />
     </div>
   );

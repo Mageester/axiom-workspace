@@ -1,23 +1,41 @@
-import { GitBranch, RefreshCw, X, AlertCircle, Loader2 } from "lucide-react";
-import type { LiveRepo } from "../types";
+import {
+  AlertCircle,
+  GitBranch,
+  Loader2,
+  Play,
+  RefreshCw,
+  Timer,
+  X,
+} from "lucide-react";
+import type { LiveRepo, WorkSession } from "../types";
 import { StatusBadge } from "./StatusBadge";
-import { iconBtnClass } from "../lib/constants";
+import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
 
 interface RepoCardProps {
   repo: LiveRepo;
   refreshing: boolean;
+  activeSessions: WorkSession[];
   onRefresh: () => void;
   onRemove: () => void;
+  onStartSession: () => void;
 }
 
 export function RepoCard({
   repo,
   refreshing,
+  activeSessions,
   onRefresh,
   onRemove,
+  onStartSession,
 }: RepoCardProps) {
+  const hasActiveSessions = activeSessions.length > 0;
+
   return (
-    <div className="bg-surface-1 border border-border rounded-lg p-5 hover:border-border-hover transition-colors">
+    <div
+      className={`rounded-lg border bg-surface-1 p-5 transition-colors hover:border-border-hover ${
+        hasActiveSessions ? "border-status-dirty/50" : "border-border"
+      }`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className="min-w-0 flex-1 mr-3">
           <h3 className="text-sm font-medium text-text-primary truncate">
@@ -56,6 +74,28 @@ export function RepoCard({
         </div>
       )}
 
+      {hasActiveSessions && (
+        <div className="mb-3 rounded-md border border-status-dirty/30 bg-status-dirty/10 px-3 py-2">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-status-dirty">
+            <Timer size={12} />
+            {activeSessions.length} active session
+            {activeSessions.length === 1 ? "" : "s"}
+          </div>
+          <div className="space-y-1">
+            {activeSessions.slice(0, 3).map((session) => (
+              <p key={session.id} className="truncate text-xs text-text-secondary">
+                {session.userName}: {session.title}
+              </p>
+            ))}
+            {activeSessions.length > 3 && (
+              <p className="text-xs text-text-muted">
+                +{activeSessions.length - 3} more
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
         <div className="flex items-center gap-1.5 text-xs text-text-secondary">
           <GitBranch size={12} />
@@ -71,6 +111,14 @@ export function RepoCard({
           </span>
         )}
       </div>
+
+      <button
+        className={`${secondaryBtnClass} mt-4 w-full justify-center`}
+        onClick={onStartSession}
+      >
+        <Play size={14} />
+        Start Session
+      </button>
     </div>
   );
 }

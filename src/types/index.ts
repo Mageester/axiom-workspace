@@ -26,3 +26,35 @@ export interface LiveRepo {
   lastCheckedAt: string;
   errorMessage: string | null;
 }
+
+export type SessionStatus = "active" | "ended";
+
+export interface LockTarget {
+  id: string;
+  type: "file" | "folder" | "area";
+  value: string;
+  label?: string;
+}
+
+export interface WorkSession {
+  id: string;
+  repoId: string;
+  repoName: string;
+  repoPath: string;
+  userName: string;
+  title: string;
+  notes?: string;
+  branch?: string;
+  targets: LockTarget[];
+  status: SessionStatus;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface SessionOverlap {
+  sessionId: string;
+  sessionTitle: string;
+  repoName: string;
+  targetValue: string;
+  reason: string;
+}
