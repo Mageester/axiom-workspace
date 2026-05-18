@@ -1,6 +1,13 @@
 import { useState, useMemo } from "react";
-import { Plus, RefreshCw, Loader2 } from "lucide-react";
-import type { LiveRepo, RepoStatus, WorkSession } from "../types";
+import { AlertTriangle, Clock, Plus, RefreshCw, Loader2 } from "lucide-react";
+import type {
+  LiveRepo,
+  RepoStatus,
+  SetupState,
+  SyncSettings,
+  SyncStatus,
+  WorkSession,
+} from "../types";
 import { RepoCard } from "../components/RepoCard";
 import { StatusBadge } from "../components/StatusBadge";
 import { PageHeader } from "../components/PageHeader";
@@ -22,6 +29,45 @@ interface DashboardProps {
   onStartSession: (input: CreateSessionInput) => void;
   getRepoSessions: (repo: LiveRepo) => WorkSession[];
   defaultUserName: string;
+  setupState: SetupState;
+  syncSettings: SyncSettings;
+  syncStatus: SyncStatus;
+  onSyncNow: () => Promise<void>;
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) {
+    return "Not synced yet";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function syncStatusLabel(status: SyncStatus): string {
+  switch (status) {
+    case "checking":
+      return "Checking";
+    case "writing_local_events":
+      return "Writing local events";
+    case "pulling_updates":
+      return "Pulling updates";
+    case "reading_shared_events":
+      return "Reading shared events";
+    case "merging":
+      return "Merging";
+    case "pushing":
+      return "Pushing";
+    case "complete":
+      return "Complete";
+    case "error":
+      return "Needs attention";
+    default:
+      return "Idle";
+  }
 }
 
 export function Dashboard({
@@ -36,6 +82,10 @@ export function Dashboard({
   onStartSession,
   getRepoSessions,
   defaultUserName,
+  setupState,
+  syncSettings,
+  syncStatus,
+  onSyncNow,
 }: DashboardProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
@@ -59,6 +109,8 @@ export function Dashboard({
       repo.status === "locked",
   ).length;
   const errorRepos = counts.error ?? 0;
+  const syncing =
+    syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
 
   return (
     <div className="flex-1 overflow-auto">
@@ -91,6 +143,70 @@ export function Dashboard({
       />
 
       <main className="p-8">
+        <section
+          className={`mb-6 rounded-lg border p-5 ${
+            setupState.setupComplete
+              ? "border-border bg-surface-1"
+              : "border-status-dirty/30 bg-status-dirty/10"
+          }`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                {!setupState.setupComplete && (
+                  <AlertTriangle size={16} className="text-status-dirty" />
+                )}
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                  Team Sync
+                </h3>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+                {setupState.setupComplete
+                  ? "Sessions, locks, and notes sync through the Axiom team workspace. Source code stays in normal project repos."
+                  : "Axiom is local-only until the team sync workspace is connected."}
+              </p>
+              {syncSettings.lastSyncError && (
+                <p className="mt-2 text-sm text-status-locked">
+                  {syncSettings.lastSyncError}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-text-muted">
+                  Status
+                </p>
+                <p className="mt-1 text-sm text-text-primary">
+                  {syncStatusLabel(syncStatus)}
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-text-muted">
+                  Last sync
+                </p>
+                <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-text-primary">
+                  <Clock size={13} />
+                  {formatDateTime(syncSettings.lastSyncAt)}
+                </p>
+              </div>
+              {setupState.setupComplete && (
+                <button
+                  className={primaryBtnClass}
+                  onClick={() => void onSyncNow()}
+                  disabled={syncing}
+                >
+                  {syncing ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={14} />
+                  )}
+                  Sync Now
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
         <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard label="Total Repos" value={repos.length} />
           <StatCard label="Clean Repos" value={cleanRepos} />

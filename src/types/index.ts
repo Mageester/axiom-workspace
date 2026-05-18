@@ -63,31 +63,64 @@ export interface DeviceIdentity {
   deviceId: string;
   deviceName: string;
   userName: string;
+  createdAt: string;
+}
+
+export type SetupStatus =
+  | "complete"
+  | "missing"
+  | "needs_action"
+  | "error"
+  | "checking";
+
+export interface SetupChecklistItem {
+  key:
+    | "git"
+    | "github"
+    | "syncWorkspace"
+    | "syncFolder"
+    | "identity";
+  label: string;
+  status: SetupStatus;
+  message: string;
+}
+
+export interface SetupState {
+  setupComplete: boolean;
+  identity: DeviceIdentity;
+  syncRepoUrl: string;
+  syncLocalPath: string;
+  lastSetupCheckAt: string | null;
+  lastError?: string;
 }
 
 export interface SyncSettings {
-  identity: DeviceIdentity;
-  syncRepoPath: string;
+  syncRepoUrl: string;
+  syncLocalPath: string;
   autoSyncEnabled: boolean;
+  syncIntervalSeconds: number;
+  lastSyncAt?: string;
+  lastSyncStatus?: string;
+  lastSyncError?: string;
 }
 
 export type SyncStatus =
   | "idle"
-  | "validating"
-  | "exporting"
-  | "importing"
-  | "writing"
-  | "reading"
-  | "success"
+  | "checking"
+  | "writing_local_events"
+  | "pulling_updates"
+  | "reading_shared_events"
+  | "merging"
+  | "pushing"
+  | "complete"
   | "error";
 
 export type WorkspaceEventType =
   | "session_created"
   | "session_ended"
   | "session_updated"
-  | "lock_created"
-  | "lock_released"
-  | "note_added";
+  | "note_added"
+  | "snapshot_created";
 
 export interface WorkspaceEvent {
   id: string;
@@ -101,8 +134,8 @@ export interface WorkspaceEvent {
 
 export interface SyncSnapshot {
   version: 1;
-  exportedAt: string;
-  device: DeviceIdentity;
+  createdAt: string;
+  createdByDeviceId: string;
   sessions: WorkSession[];
-  events: WorkspaceEvent[];
+  eventsApplied: string[];
 }

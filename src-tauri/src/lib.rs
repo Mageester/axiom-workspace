@@ -9,9 +9,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             repos::get_repo_status,
             repos::get_multiple_repo_statuses,
+            sync::check_git_installed,
+            sync::validate_github_access,
+            sync::get_default_sync_path,
+            sync::setup_sync_repo,
             sync::validate_sync_repo,
-            sync::read_sync_events,
-            sync::write_sync_event,
+            sync::ensure_sync_structure,
+            sync::sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

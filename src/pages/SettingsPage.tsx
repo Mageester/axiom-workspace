@@ -1,47 +1,51 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
+  AlertCircle,
   CheckCircle2,
-  Download,
-  FolderGit2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
   RefreshCw,
-  Upload,
+  RotateCcw,
+  Save,
 } from "lucide-react";
 import type {
   DeviceIdentity,
+  SetupChecklistItem,
+  SetupState,
+  SetupStatus,
   SyncSettings,
   SyncStatus,
-  WorkSession,
-  WorkspaceEvent,
 } from "../types";
 import { PageHeader } from "../components/PageHeader";
 import { primaryBtnClass, secondaryBtnClass } from "../lib/constants";
-import {
-  applyWorkspaceEvents,
-  buildSnapshot,
-  downloadJson,
-  mergeSessions,
-  parseImportedState,
-  readSyncEvents,
-  saveSyncSettings,
-  validateSyncRepo,
-  writeSyncEvent,
-} from "../lib/sync";
 
 interface SettingsPageProps {
-  sessions: WorkSession[];
-  events: WorkspaceEvent[];
+  setupState: SetupState;
+  checklist: SetupChecklistItem[];
   settings: SyncSettings;
-  lastSyncAt: string | null;
+  syncStatus: SyncStatus;
+  eventCount: number;
+  onIdentityChange: (identity: DeviceIdentity) => void;
+  onSetupChange: (setupState: SetupState) => void;
   onSettingsChange: (settings: SyncSettings) => void;
-  onSessionsChange: (sessions: WorkSession[]) => void;
-  onEventsChange: (events: WorkspaceEvent[]) => void;
-  onSyncCompleted: () => void;
+  onValidateSetup: () => Promise<void>;
+  onSyncNow: () => Promise<void>;
+  onResetSetup: () => void;
 }
 
 const fieldClass =
-  "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent";
+  "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-70";
 
-function formatDateTime(value: string | null): string {
+const statusCopy: Record<SetupStatus, string> = {
+  complete: "Complete",
+  missing: "Missing",
+  needs_action: "Needs action",
+  error: "Error",
+  checking: "Checking",
+};
+
+function formatDateTime(value?: string): string {
   if (!value) {
     return "Not synced yet";
   }
@@ -53,208 +57,100 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
-function statusLabel(status: SyncStatus): string {
+function syncStatusLabel(status: SyncStatus): string {
   switch (status) {
-    case "validating":
-      return "Checking sync repo";
-    case "exporting":
-      return "Exporting state";
-    case "importing":
-      return "Importing state";
-    case "writing":
-      return "Writing events";
-    case "reading":
-      return "Reading events";
-    case "success":
-      return "Ready";
+    case "checking":
+      return "Checking";
+    case "writing_local_events":
+      return "Writing local events";
+    case "pulling_updates":
+      return "Pulling updates";
+    case "reading_shared_events":
+      return "Reading shared events";
+    case "merging":
+      return "Merging";
+    case "pushing":
+      return "Pushing";
+    case "complete":
+      return "Complete";
     case "error":
-      return "Needs attention";
+      return "Error";
     default:
       return "Idle";
   }
 }
 
-function mergeEvents(
-  current: WorkspaceEvent[],
-  incoming: WorkspaceEvent[],
-): WorkspaceEvent[] {
-  return Array.from(
-    new Map([...current, ...incoming].map((event) => [event.id, event])).values(),
-  ).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+function StatusIcon({ status }: { status: SetupStatus }) {
+  if (status === "complete") {
+    return <CheckCircle2 size={15} className="text-status-clean" />;
+  }
+  if (status === "checking") {
+    return <Loader2 size={15} className="animate-spin text-accent" />;
+  }
+  return <AlertCircle size={15} className="text-status-dirty" />;
 }
 
 export function SettingsPage({
-  sessions,
-  events,
+  setupState,
+  checklist,
   settings,
-  lastSyncAt,
+  syncStatus,
+  eventCount,
+  onIdentityChange,
+  onSetupChange,
   onSettingsChange,
-  onSessionsChange,
-  onEventsChange,
-  onSyncCompleted,
+  onValidateSetup,
+  onSyncNow,
+  onResetSetup,
 }: SettingsPageProps) {
-  const [status, setStatus] = useState<SyncStatus>("idle");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [identityDraft, setIdentityDraft] = useState(setupState.identity);
+  const [repoUrlDraft, setRepoUrlDraft] = useState(settings.syncRepoUrl);
+  const [syncPathDraft, setSyncPathDraft] = useState(settings.syncLocalPath);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const syncing =
+    syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
 
-  function updateIdentity(nextIdentity: Partial<DeviceIdentity>) {
+  function saveIdentity() {
+    onIdentityChange({
+      ...identityDraft,
+      userName: identityDraft.userName.trim(),
+      deviceName: identityDraft.deviceName.trim() || "Axiom Device",
+    });
+  }
+
+  function saveAdvanced() {
     const nextSettings = {
       ...settings,
-      identity: {
-        ...settings.identity,
-        ...nextIdentity,
-      },
+      syncRepoUrl: repoUrlDraft.trim(),
+      syncLocalPath: syncPathDraft.trim(),
+      autoSyncEnabled: false,
     };
-    saveSyncSettings(nextSettings);
     onSettingsChange(nextSettings);
-  }
-
-  function updateSyncRepoPath(syncRepoPath: string) {
-    const nextSettings = { ...settings, syncRepoPath };
-    saveSyncSettings(nextSettings);
-    onSettingsChange(nextSettings);
-  }
-
-  function setSuccess(nextMessage: string) {
-    setStatus("success");
-    setMessage(nextMessage);
-    setError("");
-  }
-
-  function setFailure(nextError: string) {
-    setStatus("error");
-    setError(nextError);
-    setMessage("");
-  }
-
-  async function handleValidate() {
-    if (!settings.syncRepoPath.trim()) {
-      setFailure("Choose a local sync repo path first.");
-      return;
-    }
-
-    setStatus("validating");
-    try {
-      const result = await validateSyncRepo(settings.syncRepoPath.trim());
-      if (result.ok) {
-        setSuccess(result.message);
-        onSyncCompleted();
-      } else {
-        setFailure(result.message);
-      }
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : "Could not validate sync repo.");
-    }
-  }
-
-  function handleExport() {
-    setStatus("exporting");
-    try {
-      const snapshot = buildSnapshot(sessions, events, settings.identity);
-      downloadJson("axiom-workspace-state.json", snapshot);
-      setSuccess("Workspace coordination state exported.");
-    } catch {
-      setFailure("Could not export workspace state.");
-    }
-  }
-
-  async function handleImportFile(file: File) {
-    setStatus("importing");
-    try {
-      const text = await file.text();
-      const imported = parseImportedState(text);
-      const mergedEvents = mergeEvents(events, imported.events);
-      const eventSessions = applyWorkspaceEvents(sessions, imported.events);
-      const mergedSessions = mergeSessions(eventSessions, imported.sessions);
-      onEventsChange(mergedEvents);
-      onSessionsChange(mergedSessions);
-      setSuccess(
-        `Imported ${imported.sessions.length} sessions and ${imported.events.length} events.`,
-      );
-    } catch {
-      setFailure("That file is not valid Axiom Workspace sync JSON.");
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  }
-
-  async function handleWriteEvents() {
-    if (!settings.syncRepoPath.trim()) {
-      setFailure("Choose a local sync repo path first.");
-      return;
-    }
-
-    setStatus("writing");
-    try {
-      const validation = await validateSyncRepo(settings.syncRepoPath.trim());
-      if (!validation.ok) {
-        setFailure(validation.message);
-        return;
-      }
-      await Promise.all(
-        events.map((event) => writeSyncEvent(settings.syncRepoPath.trim(), event)),
-      );
-      onSyncCompleted();
-      setSuccess(`Wrote ${events.length} local events to the sync repo.`);
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : "Could not write sync events.");
-    }
-  }
-
-  async function handleReadEvents() {
-    if (!settings.syncRepoPath.trim()) {
-      setFailure("Choose a local sync repo path first.");
-      return;
-    }
-
-    setStatus("reading");
-    try {
-      const validation = await validateSyncRepo(settings.syncRepoPath.trim());
-      if (!validation.ok) {
-        setFailure(validation.message);
-        return;
-      }
-      const result = await readSyncEvents(settings.syncRepoPath.trim());
-      const mergedEvents = mergeEvents(events, result.events);
-      const mergedSessions = applyWorkspaceEvents(sessions, result.events);
-      onEventsChange(mergedEvents);
-      onSessionsChange(mergedSessions);
-      onSyncCompleted();
-      setSuccess(
-        `Read ${result.events.length} events from the sync repo${
-          result.skipped ? ` and skipped ${result.skipped} unreadable files` : ""
-        }.`,
-      );
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : "Could not read sync events.");
-    }
+    onSetupChange({
+      ...setupState,
+      setupComplete: false,
+      syncRepoUrl: nextSettings.syncRepoUrl,
+      syncLocalPath: nextSettings.syncLocalPath,
+      lastError: "Reconnect to validate the updated sync settings.",
+    });
   }
 
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
         title="Settings"
-        description="Identity and zero-cost coordination sync."
+        description="Identity, team sync, and setup health."
       />
 
       <main className="space-y-6 p-8">
         <section className="rounded-lg border border-border bg-surface-1 p-5">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
-                Sync
-              </h3>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
-                This syncs Axiom Workspace coordination state only. It does not
-                sync source code.
-              </p>
-            </div>
-            <span className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-text-muted">
-              Manual
-            </span>
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+              Identity
+            </h3>
+            <p className="mt-1 text-sm leading-6 text-text-muted">
+              This is how your sessions and locks appear to the team.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -264,11 +160,14 @@ export function SettingsPage({
               </span>
               <input
                 className={fieldClass}
-                value={settings.identity.userName}
+                value={identityDraft.userName}
                 onChange={(event) =>
-                  updateIdentity({ userName: event.target.value })
+                  setIdentityDraft({
+                    ...identityDraft,
+                    userName: event.target.value,
+                  })
                 }
-                placeholder="Aidan"
+                placeholder="Riley"
               />
             </label>
 
@@ -278,49 +177,61 @@ export function SettingsPage({
               </span>
               <input
                 className={fieldClass}
-                value={settings.identity.deviceName}
+                value={identityDraft.deviceName}
                 onChange={(event) =>
-                  updateIdentity({ deviceName: event.target.value })
+                  setIdentityDraft({
+                    ...identityDraft,
+                    deviceName: event.target.value,
+                  })
                 }
-                placeholder="Aidan desktop"
+                placeholder="Riley laptop"
               />
             </label>
 
             <label className="block lg:col-span-2">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-                Sync repo path
+                Device ID
               </span>
               <input
                 className={fieldClass}
-                value={settings.syncRepoPath}
-                onChange={(event) => updateSyncRepoPath(event.target.value)}
-                placeholder="C:\\Users\\aidan\\Desktop\\axiom-workspace-sync"
-              />
-            </label>
-
-            <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3 lg:col-span-2">
-              <div>
-                <p className="text-sm font-medium text-text-primary">
-                  Auto-sync
-                </p>
-                <p className="text-xs text-text-muted">Coming soon</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={false}
-                disabled
-                className="h-4 w-4 accent-indigo-500"
+                value={setupState.identity.deviceId}
+                readOnly
               />
             </label>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="mt-5">
+            <button className={primaryBtnClass} onClick={saveIdentity}>
+              <Save size={14} />
+              Save Identity
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Team Sync
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+                This syncs sessions, locks, and notes only. Your source code
+                stays in your normal project repos. Axiom Workspace uses GitHub
+                so team sync stays free.
+              </p>
+            </div>
+            <span className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-text-muted">
+              Manual sync
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div className="rounded-md border border-border bg-surface-0 px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-text-muted">
                 Status
               </p>
               <p className="mt-1 text-sm text-text-primary">
-                {statusLabel(status)}
+                {syncStatusLabel(syncStatus)}
               </p>
             </div>
             <div className="rounded-md border border-border bg-surface-0 px-3 py-3">
@@ -328,67 +239,193 @@ export function SettingsPage({
                 Last sync
               </p>
               <p className="mt-1 text-sm text-text-primary">
-                {formatDateTime(lastSyncAt)}
+                {formatDateTime(settings.lastSyncAt)}
               </p>
             </div>
             <div className="rounded-md border border-border bg-surface-0 px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-text-muted">
                 Local events
               </p>
-              <p className="mt-1 text-sm text-text-primary">{events.length}</p>
+              <p className="mt-1 text-sm text-text-primary">{eventCount}</p>
+            </div>
+            <div className="rounded-md border border-border bg-surface-0 px-3 py-3">
+              <p className="text-xs uppercase tracking-wide text-text-muted">
+                Connected
+              </p>
+              <p className="mt-1 text-sm text-text-primary">
+                {setupState.setupComplete ? "Yes" : "Needs setup"}
+              </p>
             </div>
           </div>
 
-          {(message || error) && (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                Sync repo URL
+              </span>
+              <input className={fieldClass} value={settings.syncRepoUrl} readOnly />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                Local sync folder
+              </span>
+              <input
+                className={fieldClass}
+                value={settings.syncLocalPath}
+                readOnly
+              />
+            </label>
+          </div>
+
+          {(settings.lastSyncStatus || settings.lastSyncError) && (
             <div
               className={`mt-5 rounded-md border px-3 py-2 text-sm ${
-                error
+                settings.lastSyncError
                   ? "border-status-locked/40 bg-status-locked/10 text-status-locked"
                   : "border-status-clean/40 bg-status-clean/10 text-status-clean"
               }`}
             >
-              {message || error}
+              {settings.lastSyncError || settings.lastSyncStatus}
             </div>
           )}
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <button className={secondaryBtnClass} onClick={handleValidate}>
-              <FolderGit2 size={14} />
-              Validate Sync Repo
-            </button>
-            <button className={secondaryBtnClass} onClick={handleExport}>
-              <Download size={14} />
-              Export State
+            <button
+              className={primaryBtnClass}
+              onClick={() => void onSyncNow()}
+              disabled={syncing || !setupState.setupComplete}
+            >
+              {syncing ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              Sync Now
             </button>
             <button
               className={secondaryBtnClass}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => void onValidateSetup()}
             >
-              <Upload size={14} />
-              Import State
-            </button>
-            <button className={primaryBtnClass} onClick={handleWriteEvents}>
               <CheckCircle2 size={14} />
-              Write Local Events to Sync Repo
+              Validate Setup
             </button>
-            <button className={secondaryBtnClass} onClick={handleReadEvents}>
-              <RefreshCw size={14} />
-              Read Events from Sync Repo
-            </button>
+            {!setupState.setupComplete && (
+              <button className={secondaryBtnClass} onClick={onResetSetup}>
+                <RotateCcw size={14} />
+                Reconnect
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+              Setup Checklist
+            </h3>
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleImportFile(file);
-              }
-            }}
-          />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {checklist.map((item) => (
+              <div
+                key={item.key}
+                className="flex items-start justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <StatusIcon status={item.status} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text-primary">
+                      {item.label}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-5 text-text-muted">
+                      {item.message}
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-text-muted">
+                  {statusCopy[item.status]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface-1 p-5">
+          <button
+            className="flex w-full items-center justify-between text-left"
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Advanced Sync Settings
+              </h3>
+              <p className="mt-1 text-sm text-text-muted">
+                Main users should not need these controls.
+              </p>
+            </div>
+            {advancedOpen ? (
+              <ChevronDown size={18} className="text-text-muted" />
+            ) : (
+              <ChevronRight size={18} className="text-text-muted" />
+            )}
+          </button>
+
+          {advancedOpen && (
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Sync repo URL override
+                </span>
+                <input
+                  className={fieldClass}
+                  value={repoUrlDraft}
+                  onChange={(event) => setRepoUrlDraft(event.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Local sync path override
+                </span>
+                <input
+                  className={fieldClass}
+                  value={syncPathDraft}
+                  onChange={(event) => setSyncPathDraft(event.target.value)}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Auto-sync
+                  </p>
+                  <p className="text-xs text-text-muted">Coming soon</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled
+                  className="h-4 w-4 accent-indigo-500"
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button className={secondaryBtnClass} onClick={saveAdvanced}>
+                  <Save size={14} />
+                  Save Advanced Settings
+                </button>
+                <button
+                  className={secondaryBtnClass}
+                  onClick={() => void onValidateSetup()}
+                >
+                  <RefreshCw size={14} />
+                  Re-check Prerequisites
+                </button>
+                <button className={secondaryBtnClass} onClick={onResetSetup}>
+                  <RotateCcw size={14} />
+                  Reset Setup
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       </main>
     </div>
