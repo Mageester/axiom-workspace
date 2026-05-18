@@ -15,6 +15,14 @@ pub enum Status {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum UpstreamStatus {
+    Ok,
+    Missing,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RepoStatus {
     pub id: String,
     pub name: String,
@@ -22,6 +30,10 @@ pub struct RepoStatus {
     pub current_branch: String,
     pub is_git_repo: bool,
     pub has_uncommitted_changes: bool,
+    pub has_upstream: bool,
+    pub upstream_status: UpstreamStatus,
+    pub upstream_error_message: Option<String>,
+    pub is_detached_head: bool,
     pub ahead: u32,
     pub behind: u32,
     pub status: Status,
@@ -89,12 +101,44 @@ fn error_status(path: &str, name: String, id: String, message: &str) -> RepoStat
         current_branch: String::new(),
         is_git_repo: false,
         has_uncommitted_changes: false,
+        has_upstream: false,
+        upstream_status: UpstreamStatus::Error,
+        upstream_error_message: None,
+        is_detached_head: false,
         ahead: 0,
         behind: 0,
         status: Status::Error,
         last_checked_at: now_unix_secs(),
         error_message: Some(message.to_string()),
     }
+}
+
+fn repo_error_status(path: &str, name: String, id: String, message: &str) -> RepoStatus {
+    RepoStatus {
+        id,
+        name,
+        path: path.to_string(),
+        current_branch: String::new(),
+        is_git_repo: true,
+        has_uncommitted_changes: false,
+        has_upstream: false,
+        upstream_status: UpstreamStatus::Error,
+        upstream_error_message: None,
+        is_detached_head: false,
+        ahead: 0,
+        behind: 0,
+        status: Status::Error,
+        last_checked_at: now_unix_secs(),
+        error_message: Some(message.to_string()),
+    }
+}
+
+fn is_missing_upstream_error(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("no upstream")
+        || lower.contains("no tracking information")
+        || lower.contains("does not have any commits yet")
+        || lower.contains("head does not point to a branch")
 }
 
 fn check_repo_status(path: &str) -> RepoStatus {
@@ -119,37 +163,48 @@ fn check_repo_status(path: &str) -> RepoStatus {
         return error_status(path, name, id, "Not a Git repository");
     }
 
-    let current_branch = match git_command(path, &["rev-parse", "--abbrev-ref", "HEAD"]) {
-        Ok(branch) if branch == "HEAD" => {
-            // Detached HEAD — get short commit hash
-            git_command(path, &["rev-parse", "--short", "HEAD"])
-                .unwrap_or_else(|_| "HEAD".to_string())
-        }
-        Ok(branch) => branch,
-        Err(_) => "unknown".to_string(),
+    let (current_branch, is_detached_head) =
+        match git_command(path, &["rev-parse", "--abbrev-ref", "HEAD"]) {
+            Ok(branch) if branch == "HEAD" => {
+                let short_hash = git_command(path, &["rev-parse", "--short", "HEAD"])
+                    .unwrap_or_else(|_| "Detached HEAD".to_string());
+                (short_hash, true)
+            }
+            Ok(branch) => (branch, false),
+            Err(e) => return repo_error_status(path, name, id, &e),
+        };
+
+    let has_uncommitted_changes = match git_command(path, &["status", "--porcelain"]) {
+        Ok(output) => !output.is_empty(),
+        Err(e) => return repo_error_status(path, name, id, &e),
     };
 
-    let has_uncommitted_changes = git_command(path, &["status", "--porcelain"])
-        .map(|out| !out.is_empty())
-        .unwrap_or(false);
-
-    let (ahead, behind) = git_command(
+    let (ahead, behind, has_upstream, upstream_status, upstream_error_message) = match git_command(
         path,
         &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-    )
-    .ok()
-    .and_then(|output| {
-        let parts: Vec<&str> = output.split('\t').collect();
-        if parts.len() == 2 {
-            Some((
-                parts[0].parse::<u32>().unwrap_or(0),
-                parts[1].parse::<u32>().unwrap_or(0),
-            ))
-        } else {
-            None
+    ) {
+        Ok(output) => {
+            let parts: Vec<&str> = output.split('\t').collect();
+            if parts.len() == 2 {
+                match (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                    (Ok(ahead), Ok(behind)) => (ahead, behind, true, UpstreamStatus::Ok, None),
+                    _ => {
+                        let message = format!("Failed to parse upstream counts: {}", output);
+                        return repo_error_status(path, name, id, &message);
+                    }
+                }
+            } else {
+                let message = format!("Failed to parse upstream counts: {}", output);
+                return repo_error_status(path, name, id, &message);
+            }
         }
-    })
-    .unwrap_or((0, 0));
+        Err(e) if is_missing_upstream_error(&e) => (0, 0, false, UpstreamStatus::Missing, None),
+        Err(e) => {
+            let mut status = repo_error_status(path, name, id, &e);
+            status.upstream_error_message = Some(e);
+            return status;
+        }
+    };
 
     let status = derive_status(has_uncommitted_changes, behind);
 
@@ -160,6 +215,10 @@ fn check_repo_status(path: &str) -> RepoStatus {
         current_branch,
         is_git_repo: true,
         has_uncommitted_changes,
+        has_upstream,
+        upstream_status,
+        upstream_error_message,
+        is_detached_head,
         ahead,
         behind,
         status,

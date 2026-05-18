@@ -1,4 +1,5 @@
 export type RepoStatus = "clean" | "dirty" | "behind" | "locked" | "error";
+export type UpstreamStatus = "ok" | "missing" | "error";
 
 export type NavPage =
   | "dashboard"
@@ -15,6 +16,10 @@ export interface LiveRepo {
   currentBranch: string;
   isGitRepo: boolean;
   hasUncommittedChanges: boolean;
+  hasUpstream: boolean;
+  upstreamStatus: UpstreamStatus;
+  upstreamErrorMessage?: string | null;
+  isDetachedHead: boolean;
   ahead: number;
   behind: number;
   status: RepoStatus;

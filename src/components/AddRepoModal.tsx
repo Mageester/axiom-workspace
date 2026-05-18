@@ -73,7 +73,10 @@ export function AddRepoModal({ open, onClose, onAdd }: AddRepoModalProps) {
           <input
             type="text"
             value={path}
-            onChange={(e) => setPath(e.target.value)}
+            onChange={(e) => {
+              setPath(e.target.value);
+              setError("");
+            }}
             placeholder="C:\Users\you\projects\my-repo"
             className="w-full px-3 py-2 rounded-md text-sm bg-surface-0 text-text-primary border border-border focus:border-accent focus:outline-none placeholder:text-text-muted/50"
             autoFocus
