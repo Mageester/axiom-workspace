@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { NavPage } from "../types";
+import axiomMark from "../../app-icon.png";
 
 const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
@@ -27,10 +28,22 @@ export function Sidebar({ activeItem, onNavigate }: SidebarProps) {
   return (
     <aside className="w-56 h-screen bg-surface-1 border-r border-border flex flex-col">
       <div className="px-5 py-5 border-b border-border">
-        <h1 className="text-sm font-semibold tracking-wide text-text-primary uppercase">
-          Axiom
-        </h1>
-        <p className="text-xs text-text-muted mt-0.5">Workspace</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-black">
+            <img
+              src={axiomMark}
+              alt=""
+              className="h-6 w-6 object-contain"
+              aria-hidden="true"
+            />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold tracking-wide text-text-primary">
+              Axiom Workspace
+            </h1>
+            <p className="text-xs text-text-muted mt-0.5">Internal operations</p>
+          </div>
+        </div>
       </div>
 
       <nav className="flex-1 px-3 py-3 space-y-0.5">
