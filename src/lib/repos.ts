@@ -10,14 +10,30 @@ function normalizePath(path: string): string {
 export function loadRepoPaths(): string[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) {
+      return [];
+    }
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((path): path is string => typeof path === "string")
+      .map((path) => path.trim())
+      .filter(Boolean);
   } catch {
     return [];
   }
 }
 
 export function saveRepoPaths(paths: string[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(paths));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(paths));
+  } catch {
+    // Storage may be unavailable; callers still keep in-memory state.
+  }
 }
 
 export function addRepoPath(path: string): string[] {

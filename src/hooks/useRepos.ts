@@ -63,9 +63,11 @@ export function useRepos(): UseReposReturn {
   const addRepo = useCallback(
     async (path: string): Promise<LiveRepo> => {
       const status = await getRepoStatus(path);
-      if (status.isGitRepo) {
-        addRepoPath(path);
+      if (status.status === "error" || !status.isGitRepo) {
+        throw new Error(status.errorMessage || "Invalid Git repository");
       }
+
+      addRepoPath(path);
       setRepos((prev) => {
         const existing = prev.findIndex((r) => r.path === status.path);
         if (existing >= 0) {
