@@ -58,3 +58,51 @@ export interface SessionOverlap {
   targetValue: string;
   reason: string;
 }
+
+export interface DeviceIdentity {
+  deviceId: string;
+  deviceName: string;
+  userName: string;
+}
+
+export interface SyncSettings {
+  identity: DeviceIdentity;
+  syncRepoPath: string;
+  autoSyncEnabled: boolean;
+}
+
+export type SyncStatus =
+  | "idle"
+  | "validating"
+  | "exporting"
+  | "importing"
+  | "writing"
+  | "reading"
+  | "success"
+  | "error";
+
+export type WorkspaceEventType =
+  | "session_created"
+  | "session_ended"
+  | "session_updated"
+  | "lock_created"
+  | "lock_released"
+  | "note_added";
+
+export interface WorkspaceEvent {
+  id: string;
+  type: WorkspaceEventType;
+  deviceId: string;
+  userName: string;
+  createdAt: string;
+  payload: unknown;
+  version: 1;
+}
+
+export interface SyncSnapshot {
+  version: 1;
+  exportedAt: string;
+  device: DeviceIdentity;
+  sessions: WorkSession[];
+  events: WorkspaceEvent[];
+}

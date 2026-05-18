@@ -21,6 +21,7 @@ interface DashboardProps {
   onRemoveRepo: (path: string) => void;
   onStartSession: (input: CreateSessionInput) => void;
   getRepoSessions: (repo: LiveRepo) => WorkSession[];
+  defaultUserName: string;
 }
 
 export function Dashboard({
@@ -34,6 +35,7 @@ export function Dashboard({
   onRemoveRepo,
   onStartSession,
   getRepoSessions,
+  defaultUserName,
 }: DashboardProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
@@ -159,6 +161,7 @@ export function Dashboard({
         repos={repos}
         activeSessions={activeSessions}
         initialRepo={sessionRepo}
+        defaultUserName={defaultUserName}
         onClose={() => setSessionRepo(null)}
         onCreate={(input) => {
           onStartSession(input);

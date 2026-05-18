@@ -6,6 +6,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { useRepos } from "./hooks/useRepos";
 import { SessionsPage } from "./pages/SessionsPage";
 import { LocksPage } from "./pages/LocksPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import {
   createSession,
   endSession,
@@ -15,6 +16,14 @@ import {
   saveSessions,
   type CreateSessionInput,
 } from "./lib/sessions";
+import {
+  createWorkspaceEvent,
+  loadEvents,
+  loadSyncSettings,
+  saveEvents,
+  saveSyncSettings,
+} from "./lib/sync";
+import type { SyncSettings, WorkspaceEvent } from "./types";
 
 const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
   repos: "Repos",
@@ -27,6 +36,13 @@ const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
 function App() {
   const [activeNav, setActiveNav] = useState<NavPage>("dashboard");
   const [sessions, setSessions] = useState<WorkSession[]>(() => loadSessions());
+  const [events, setEvents] = useState<WorkspaceEvent[]>(() => loadEvents());
+  const [syncSettings, setSyncSettings] = useState<SyncSettings>(() =>
+    loadSyncSettings(),
+  );
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() =>
+    localStorage.getItem("axiom-workspace:last-sync-at"),
+  );
   const {
     repos,
     loading,
@@ -47,10 +63,23 @@ function App() {
   );
 
   function startSession(input: CreateSessionInput) {
-    const session = createSession(input);
+    const session = createSession({
+      ...input,
+      userName: input.userName || syncSettings.identity.userName,
+    });
+    const event = createWorkspaceEvent(
+      "session_created",
+      { session },
+      syncSettings.identity,
+    );
     setSessions((prev) => {
       const next = [session, ...prev];
       saveSessions(next);
+      return next;
+    });
+    setEvents((prev) => {
+      const next = [...prev, event];
+      saveEvents(next);
       return next;
     });
   }
@@ -59,8 +88,42 @@ function App() {
     setSessions((prev) => {
       const next = endSession(prev, sessionId);
       saveSessions(next);
+      const endedSession = next.find((session) => session.id === sessionId);
+      if (endedSession?.endedAt) {
+        const event = createWorkspaceEvent(
+          "session_ended",
+          { sessionId, endedAt: endedSession.endedAt },
+          syncSettings.identity,
+        );
+        setEvents((eventPrev) => {
+          const eventNext = [...eventPrev, event];
+          saveEvents(eventNext);
+          return eventNext;
+        });
+      }
       return next;
     });
+  }
+
+  function updateSessions(next: WorkSession[]) {
+    setSessions(next);
+    saveSessions(next);
+  }
+
+  function updateEvents(next: WorkspaceEvent[]) {
+    setEvents(next);
+    saveEvents(next);
+  }
+
+  function updateSyncSettings(next: SyncSettings) {
+    setSyncSettings(next);
+    saveSyncSettings(next);
+  }
+
+  function markSyncCompleted() {
+    const now = new Date().toISOString();
+    setLastSyncAt(now);
+    localStorage.setItem("axiom-workspace:last-sync-at", now);
   }
 
   function getRepoSessions(repo: LiveRepo): WorkSession[] {
@@ -81,6 +144,7 @@ function App() {
           onRemoveRepo={removeRepo}
           onStartSession={startSession}
           getRepoSessions={getRepoSessions}
+          defaultUserName={syncSettings.identity.userName}
         />
       );
     }
@@ -95,6 +159,20 @@ function App() {
     }
     if (activeNav === "locks") {
       return <LocksPage activeSessions={activeSessions} />;
+    }
+    if (activeNav === "settings") {
+      return (
+        <SettingsPage
+          sessions={sessions}
+          events={events}
+          settings={syncSettings}
+          lastSyncAt={lastSyncAt}
+          onSettingsChange={updateSyncSettings}
+          onSessionsChange={updateSessions}
+          onEventsChange={updateEvents}
+          onSyncCompleted={markSyncCompleted}
+        />
+      );
     }
     return (
       <PlaceholderPage

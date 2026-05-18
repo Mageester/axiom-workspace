@@ -13,6 +13,7 @@ interface StartSessionModalProps {
   repos: LiveRepo[];
   activeSessions: WorkSession[];
   initialRepo?: LiveRepo | null;
+  defaultUserName: string;
   onClose: () => void;
   onCreate: (input: CreateSessionInput) => void;
 }
@@ -37,6 +38,7 @@ export function StartSessionModal({
   repos,
   activeSessions,
   initialRepo,
+  defaultUserName,
   onClose,
   onCreate,
 }: StartSessionModalProps) {
@@ -68,7 +70,8 @@ export function StartSessionModal({
 
     setRepoId(initialRepo?.id ?? repos[0]?.id ?? "");
     setBranch(initialRepo?.currentBranch ?? "");
-  }, [initialRepo, open, repos]);
+    setUserName(defaultUserName);
+  }, [defaultUserName, initialRepo, open, repos]);
 
   const selectedRepo = repos.find((repo) => repo.id === repoId) ?? null;
 
