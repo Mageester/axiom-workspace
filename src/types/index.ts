@@ -1,4 +1,4 @@
-export type RepoStatus = "clean" | "dirty" | "behind" | "locked";
+export type RepoStatus = "clean" | "dirty" | "behind" | "locked" | "error";
 
 export type NavPage =
   | "dashboard"
@@ -8,11 +8,16 @@ export type NavPage =
   | "activity"
   | "settings";
 
-export interface Repo {
+export interface LiveRepo {
   id: string;
   name: string;
-  description: string;
+  path: string;
+  currentBranch: string;
+  isGitRepo: boolean;
+  hasUncommittedChanges: boolean;
+  ahead: number;
+  behind: number;
   status: RepoStatus;
-  branch: string;
-  lastSync: string;
+  lastCheckedAt: string;
+  errorMessage: string | null;
 }

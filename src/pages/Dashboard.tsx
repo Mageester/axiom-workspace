@@ -1,17 +1,46 @@
-import { Plus, RefreshCw, Play } from "lucide-react";
-import { PLACEHOLDER_REPOS } from "../lib/constants";
+import { useState, useMemo } from "react";
+import { Plus, RefreshCw, Loader2 } from "lucide-react";
+import type { LiveRepo, RepoStatus } from "../types";
 import { RepoCard } from "../components/RepoCard";
 import { StatusBadge } from "../components/StatusBadge";
 import { PageHeader } from "../components/PageHeader";
 import { StatCard } from "../components/StatCard";
+import { AddRepoModal } from "../components/AddRepoModal";
+import { secondaryBtnClass, primaryBtnClass } from "../lib/constants";
 
-const secondaryBtnClass =
-  "inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer";
+interface DashboardProps {
+  repos: LiveRepo[];
+  loading: boolean;
+  refreshingPaths: Set<string>;
+  onRefreshAll: () => Promise<void>;
+  onRefreshRepo: (path: string) => Promise<void>;
+  onAddRepo: (path: string) => Promise<LiveRepo>;
+  onRemoveRepo: (path: string) => void;
+}
 
-const primaryBtnClass =
-  "inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer";
+export function Dashboard({
+  repos,
+  loading,
+  refreshingPaths,
+  onRefreshAll,
+  onRefreshRepo,
+  onAddRepo,
+  onRemoveRepo,
+}: DashboardProps) {
+  const [showAddModal, setShowAddModal] = useState(false);
 
-export function Dashboard() {
+  const counts = useMemo(
+    () =>
+      repos.reduce(
+        (acc, r) => {
+          acc[r.status] = (acc[r.status] || 0) + 1;
+          return acc;
+        },
+        {} as Record<RepoStatus, number>,
+      ),
+    [repos],
+  );
+
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
@@ -19,17 +48,24 @@ export function Dashboard() {
         description="Workspace overview and repo status"
         actions={
           <div className="flex items-center gap-2">
-            <button className={secondaryBtnClass}>
-              <RefreshCw size={14} />
+            <button
+              className={secondaryBtnClass}
+              onClick={onRefreshAll}
+              disabled={loading || repos.length === 0}
+            >
+              {loading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
               Refresh
             </button>
-            <button className={secondaryBtnClass}>
+            <button
+              className={primaryBtnClass}
+              onClick={() => setShowAddModal(true)}
+            >
               <Plus size={14} />
               Add Repo
-            </button>
-            <button className={primaryBtnClass}>
-              <Play size={14} />
-              Start Session
             </button>
           </div>
         }
@@ -41,27 +77,63 @@ export function Dashboard() {
             <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
               Repositories
             </h3>
-            <div className="flex items-center gap-2">
-              <StatusBadge status="clean" />
-              <StatusBadge status="dirty" />
-              <StatusBadge status="behind" />
-              <StatusBadge status="locked" />
-            </div>
+            {repos.length > 0 && (
+              <div className="flex items-center gap-2">
+                {(counts.clean ?? 0) > 0 && <StatusBadge status="clean" />}
+                {(counts.dirty ?? 0) > 0 && <StatusBadge status="dirty" />}
+                {(counts.behind ?? 0) > 0 && <StatusBadge status="behind" />}
+                {(counts.error ?? 0) > 0 && <StatusBadge status="error" />}
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {PLACEHOLDER_REPOS.map((repo) => (
-              <RepoCard key={repo.id} repo={repo} />
-            ))}
-          </div>
+          {loading && repos.length === 0 ? (
+            <div className="flex items-center justify-center h-64 rounded-lg border border-dashed border-border">
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <Loader2 size={16} className="animate-spin" />
+                Loading repositories…
+              </div>
+            </div>
+          ) : repos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 rounded-lg border border-dashed border-border">
+              <p className="text-sm text-text-muted mb-3">
+                No repositories added yet
+              </p>
+              <button
+                className={primaryBtnClass}
+                onClick={() => setShowAddModal(true)}
+              >
+                <Plus size={14} />
+                Add Your First Repo
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {repos.map((repo) => (
+                <RepoCard
+                  key={repo.path}
+                  repo={repo}
+                  refreshing={refreshingPaths.has(repo.path)}
+                  onRefresh={() => onRefreshRepo(repo.path)}
+                  onRemove={() => onRemoveRepo(repo.path)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard label="Total Repos" value={3} />
-          <StatCard label="Active Sessions" value={0} />
-          <StatCard label="Locked Files" value={0} />
+          <StatCard label="Total Repos" value={repos.length} />
+          <StatCard label="Dirty Repos" value={counts.dirty ?? 0} />
+          <StatCard label="Behind Repos" value={counts.behind ?? 0} />
         </div>
       </main>
+
+      <AddRepoModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={onAddRepo}
+      />
     </div>
   );
 }

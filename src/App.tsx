@@ -3,6 +3,7 @@ import type { NavPage } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { useRepos } from "./hooks/useRepos";
 
 const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
   repos: "Repos",
@@ -14,10 +15,29 @@ const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
 
 function App() {
   const [activeNav, setActiveNav] = useState<NavPage>("dashboard");
+  const {
+    repos,
+    loading,
+    refreshingPaths,
+    addRepo,
+    removeRepo,
+    refreshRepo,
+    refreshAll,
+  } = useRepos();
 
   function renderPage() {
     if (activeNav === "dashboard") {
-      return <Dashboard />;
+      return (
+        <Dashboard
+          repos={repos}
+          loading={loading}
+          refreshingPaths={refreshingPaths}
+          onRefreshAll={refreshAll}
+          onRefreshRepo={refreshRepo}
+          onAddRepo={addRepo}
+          onRemoveRepo={removeRepo}
+        />
+      );
     }
     return (
       <PlaceholderPage

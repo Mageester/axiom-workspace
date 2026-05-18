@@ -17,6 +17,10 @@ const STATUS_CONFIG: Record<RepoStatus, { label: string; className: string }> = 
     label: "Locked",
     className: "bg-status-locked/15 text-status-locked border-status-locked/30",
   },
+  error: {
+    label: "Error",
+    className: "bg-status-locked/15 text-status-locked border-status-locked/30",
+  },
 };
 
 interface StatusBadgeProps {
