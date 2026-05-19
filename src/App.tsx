@@ -26,8 +26,10 @@ import {
   getRecentEndedSessions,
   loadSessions,
   saveSessions,
+  updateSessionNotes,
   type CreateSessionInput,
 } from "./lib/sessions";
+import { loadRepoNicknames, setRepoNickname } from "./lib/repos";
 import {
   applyWorkspaceEvents,
   buildSnapshotFromSessions,
@@ -53,7 +55,7 @@ import {
   validateSyncWriteAccess,
 } from "./lib/sync";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -117,6 +119,9 @@ function App() {
   );
   const [checklist, setChecklist] = useState<SetupChecklistItem[]>(() =>
     createChecklist(loadSetupState()),
+  );
+  const [repoNicknames, setRepoNicknames] = useState<Record<string, string>>(
+    () => loadRepoNicknames(),
   );
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupChecking, setSetupChecking] = useState(false);
@@ -408,15 +413,15 @@ function App() {
     });
   }
 
-  function finishSession(sessionId: string) {
+  function finishSession(sessionId: string, endNote?: string) {
     setSessions((prev) => {
-      const next = endSession(prev, sessionId);
+      const next = endSession(prev, sessionId, endNote);
       saveSessions(next);
       const endedSession = next.find((session) => session.id === sessionId);
       if (endedSession?.endedAt) {
         const event = createWorkspaceEvent(
           "session_ended",
-          { sessionId, endedAt: endedSession.endedAt },
+          { sessionId, endedAt: endedSession.endedAt, endNote: endedSession.endNote },
           setupState.identity,
         );
         setEvents((eventPrev) => {
@@ -427,6 +432,48 @@ function App() {
       }
       return next;
     });
+  }
+
+  function handleUpdateSessionNotes(sessionId: string, notes: string) {
+    setSessions((prev) => {
+      const next = updateSessionNotes(prev, sessionId, notes);
+      saveSessions(next);
+      const event = createWorkspaceEvent(
+        "session_updated",
+        { sessionId, notes },
+        setupState.identity,
+      );
+      setEvents((eventPrev) => {
+        const eventNext = dedupeEvents([...eventPrev, event]);
+        saveEvents(eventNext);
+        return eventNext;
+      });
+      return next;
+    });
+  }
+
+  function handleRenameRepo(path: string, name: string) {
+    const updated = setRepoNickname(path, name);
+    setRepoNicknames(updated);
+  }
+
+  function emitEvent(type: Parameters<typeof createWorkspaceEvent>[0], payload: unknown) {
+    const event = createWorkspaceEvent(type, payload, setupState.identity);
+    setEvents((prev) => {
+      const next = dedupeEvents([...prev, event]);
+      saveEvents(next);
+      return next;
+    });
+  }
+
+  async function handleRefreshRepo(path: string) {
+    await refreshRepo(path);
+    emitEvent("repo_refreshed", { repoPath: path });
+  }
+
+  async function handleRefreshAll() {
+    await refreshAll();
+    emitEvent("repo_refreshed", { repoPath: "all" });
   }
 
   function updateSessions(next: WorkSession[]) {
@@ -496,6 +543,10 @@ function App() {
         lastSyncCommandError: result.lastCommandError,
       };
       persistSyncSettings(nextSettings);
+      emitEvent("sync_completed", {
+        durationMs: result.durationMs,
+        gitCommandCount: result.gitCommandCount,
+      });
       setSyncStatus("complete");
     } catch (error) {
       const message = formatError(
@@ -566,13 +617,15 @@ function App() {
       return (
         <Dashboard
           repos={repos}
+          repoNicknames={repoNicknames}
           activeSessions={activeSessions}
           loading={loading}
           refreshingPaths={refreshingPaths}
-          onRefreshAll={refreshAll}
-          onRefreshRepo={refreshRepo}
+          onRefreshAll={handleRefreshAll}
+          onRefreshRepo={handleRefreshRepo}
           onAddRepo={addRepo}
           onRemoveRepo={removeRepo}
+          onRenameRepo={handleRenameRepo}
           onStartSession={startSession}
           getRepoSessions={getRepoSessions}
           defaultUserName={setupState.identity.userName}
@@ -589,6 +642,7 @@ function App() {
           activeSessions={activeSessions}
           recentEndedSessions={recentEndedSessions}
           onEndSession={finishSession}
+          onUpdateNotes={handleUpdateSessionNotes}
         />
       );
     }
@@ -599,13 +653,15 @@ function App() {
       return (
         <ReposPage
           repos={repos}
+          repoNicknames={repoNicknames}
           activeSessions={activeSessions}
           loading={loading}
           refreshingPaths={refreshingPaths}
-          onRefreshAll={refreshAll}
-          onRefreshRepo={refreshRepo}
+          onRefreshAll={handleRefreshAll}
+          onRefreshRepo={handleRefreshRepo}
           onAddRepo={addRepo}
           onRemoveRepo={removeRepo}
+          onRenameRepo={handleRenameRepo}
           onStartSession={startSession}
           getRepoSessions={getRepoSessions}
           defaultUserName={setupState.identity.userName}

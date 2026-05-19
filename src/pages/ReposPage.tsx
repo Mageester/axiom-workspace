@@ -10,6 +10,7 @@ import type { CreateSessionInput } from "../lib/sessions";
 
 interface ReposPageProps {
   repos: LiveRepo[];
+  repoNicknames: Record<string, string>;
   activeSessions: WorkSession[];
   loading: boolean;
   refreshingPaths: Set<string>;
@@ -17,6 +18,7 @@ interface ReposPageProps {
   onRefreshRepo: (path: string) => Promise<void>;
   onAddRepo: (path: string) => Promise<LiveRepo>;
   onRemoveRepo: (path: string) => void;
+  onRenameRepo: (path: string, name: string) => void;
   onStartSession: (input: CreateSessionInput) => void;
   getRepoSessions: (repo: LiveRepo) => WorkSession[];
   defaultUserName: string;
@@ -24,6 +26,7 @@ interface ReposPageProps {
 
 export function ReposPage({
   repos,
+  repoNicknames,
   activeSessions,
   loading,
   refreshingPaths,
@@ -31,6 +34,7 @@ export function ReposPage({
   onRefreshRepo,
   onAddRepo,
   onRemoveRepo,
+  onRenameRepo,
   onStartSession,
   getRepoSessions,
   defaultUserName,
@@ -96,10 +100,12 @@ export function ReposPage({
               <RepoCard
                 key={repo.path}
                 repo={repo}
+                nickname={repoNicknames[repo.path]}
                 refreshing={refreshingPaths.has(repo.path)}
                 activeSessions={getRepoSessions(repo)}
                 onRefresh={() => onRefreshRepo(repo.path)}
                 onRemove={() => onRemoveRepo(repo.path)}
+                onRename={(name) => onRenameRepo(repo.path, name)}
                 onStartSession={() => setSessionRepo(repo)}
               />
             ))}

@@ -1,7 +1,8 @@
-import { AlertTriangle, Clock, GitBranch, Lock, Timer, TimerOff } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Check, Clock, GitBranch, Lock, Pencil, Timer, TimerOff, X } from "lucide-react";
 import type { SessionOverlap, WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
-import { secondaryBtnClass } from "../lib/constants";
+import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
 import { detectSessionOverlap, type CreateSessionInput } from "../lib/sessions";
 
 function formatDuration(startedAt: string, endedAt?: string): string {
@@ -24,7 +25,8 @@ function formatDuration(startedAt: string, endedAt?: string): string {
 interface SessionsPageProps {
   activeSessions: WorkSession[];
   recentEndedSessions: WorkSession[];
-  onEndSession: (sessionId: string) => void;
+  onEndSession: (sessionId: string, endNote?: string) => void;
+  onUpdateNotes: (sessionId: string, notes: string) => void;
 }
 
 function formatDateTime(value: string): string {
@@ -80,11 +82,18 @@ function ActiveSessionCard({
   session,
   overlaps,
   onEndSession,
+  onUpdateNotes,
 }: {
   session: WorkSession;
   overlaps: SessionOverlap[];
-  onEndSession: (sessionId: string) => void;
+  onEndSession: (sessionId: string, endNote?: string) => void;
+  onUpdateNotes: (sessionId: string, notes: string) => void;
 }) {
+  const [ending, setEnding] = useState(false);
+  const [endNote, setEndNote] = useState("");
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(session.notes ?? "");
+
   return (
     <article className="rounded-lg border border-border bg-surface-1 p-5">
       <div className="flex items-start justify-between gap-4">
@@ -97,24 +106,98 @@ function ActiveSessionCard({
           </h3>
           <p className="mt-1 text-sm text-text-secondary">{session.userName}</p>
         </div>
-        <button
-          className={secondaryBtnClass}
-          onClick={() => {
-            if (window.confirm(`End session "${session.title}"? This releases all soft locks for this session.`)) {
-              onEndSession(session.id);
-            }
-          }}
-        >
-          <TimerOff size={14} />
-          End
-        </button>
+        {!ending && (
+          <button
+            className={secondaryBtnClass}
+            onClick={() => setEnding(true)}
+          >
+            <TimerOff size={14} />
+            End
+          </button>
+        )}
       </div>
 
-      {session.notes && (
-        <p className="mt-4 text-sm leading-6 text-text-secondary">
-          {session.notes}
-        </p>
+      {ending && (
+        <div className="mt-4 rounded-md border border-status-dirty/30 bg-status-dirty/10 p-3 space-y-2">
+          <p className="text-sm font-medium text-status-dirty">
+            End session &ldquo;{session.title}&rdquo;? This releases all soft locks.
+          </p>
+          <textarea
+            className="w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+            rows={2}
+            placeholder="Handoff note (optional) — where you left off, what's next"
+            value={endNote}
+            onChange={(e) => setEndNote(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              className={`${secondaryBtnClass} !bg-status-locked/10 !text-status-locked !border-status-locked/30 hover:!bg-status-locked/20`}
+              onClick={() => {
+                onEndSession(session.id, endNote);
+                setEnding(false);
+              }}
+            >
+              Confirm End
+            </button>
+            <button
+              className={secondaryBtnClass}
+              onClick={() => { setEnding(false); setEndNote(""); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
+
+      <div className="mt-4">
+        {editingNotes ? (
+          <div className="space-y-2">
+            <textarea
+              className="w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+              rows={3}
+              placeholder="Session notes..."
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
+            />
+            <div className="flex items-center gap-1">
+              <button
+                className={iconBtnClass}
+                title="Save notes"
+                onClick={() => {
+                  onUpdateNotes(session.id, notesValue);
+                  setEditingNotes(false);
+                }}
+              >
+                <Check size={14} />
+              </button>
+              <button
+                className={iconBtnClass}
+                title="Cancel"
+                onClick={() => { setNotesValue(session.notes ?? ""); setEditingNotes(false); }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2">
+            {session.notes ? (
+              <p className="text-sm leading-6 text-text-secondary flex-1">
+                {session.notes}
+              </p>
+            ) : (
+              <p className="text-sm text-text-muted italic flex-1">No notes</p>
+            )}
+            <button
+              className={`${iconBtnClass} shrink-0`}
+              title="Edit notes"
+              onClick={() => { setNotesValue(session.notes ?? ""); setEditingNotes(true); }}
+            >
+              <Pencil size={12} />
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-text-muted">
         {session.branch && (
@@ -174,6 +257,13 @@ function EndedSessionCard({ session }: { session: WorkSession }) {
         </span>
       </div>
 
+      {session.endNote && (
+        <div className="mt-3 rounded border border-accent/20 bg-accent/5 px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-accent mb-1">Handoff Note</p>
+          <p className="text-sm leading-6 text-text-secondary">{session.endNote}</p>
+        </div>
+      )}
+
       <div className="mt-4">
         <TargetList session={session} />
       </div>
@@ -191,6 +281,7 @@ export function SessionsPage({
   activeSessions,
   recentEndedSessions,
   onEndSession,
+  onUpdateNotes,
 }: SessionsPageProps) {
   return (
     <div className="flex-1 overflow-auto">
@@ -224,6 +315,7 @@ export function SessionsPage({
                   session={session}
                   overlaps={getSessionOverlaps(session, activeSessions)}
                   onEndSession={onEndSession}
+                  onUpdateNotes={onUpdateNotes}
                 />
               ))}
             </div>

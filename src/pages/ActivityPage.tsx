@@ -1,6 +1,21 @@
+import { useMemo, useState } from "react";
 import { Activity, AlertCircle, Clock, GitBranch, RefreshCw, Timer, Upload } from "lucide-react";
-import type { RepoDiagnostics, SyncSettings, WorkspaceEvent } from "../types";
+import type { RepoDiagnostics, SyncSettings, WorkspaceEvent, WorkspaceEventType } from "../types";
 import { PageHeader } from "../components/PageHeader";
+
+type ActivityFilter = "all" | "sessions" | "sync" | "repos" | "errors";
+
+const SESSION_TYPES: WorkspaceEventType[] = ["session_created", "session_ended", "session_updated"];
+const SYNC_TYPES: WorkspaceEventType[] = ["sync_completed", "snapshot_created", "note_added"];
+const REPO_TYPES: WorkspaceEventType[] = ["repo_refreshed"];
+
+const FILTER_LABELS: Record<ActivityFilter, string> = {
+  all: "All",
+  sessions: "Sessions",
+  sync: "Sync",
+  repos: "Repos",
+  errors: "Errors",
+};
 
 interface ActivityPageProps {
   events: WorkspaceEvent[];
@@ -30,6 +45,8 @@ function eventLabel(type: string): string {
     case "session_updated": return "Session updated";
     case "note_added": return "Note added";
     case "snapshot_created": return "Snapshot created";
+    case "sync_completed": return "Sync completed";
+    case "repo_refreshed": return "Repo refreshed";
     default: return type;
   }
 }
@@ -39,8 +56,16 @@ function EventIcon({ type }: { type: string }) {
     case "session_created": return <Timer size={14} className="text-status-clean" />;
     case "session_ended": return <Clock size={14} className="text-text-muted" />;
     case "session_updated": return <RefreshCw size={14} className="text-status-behind" />;
+    case "sync_completed": return <Upload size={14} className="text-status-clean" />;
+    case "repo_refreshed": return <GitBranch size={14} className="text-accent" />;
     default: return <Activity size={14} className="text-accent" />;
   }
+}
+
+function isErrorEvent(event: WorkspaceEvent): boolean {
+  const payload = event.payload as Record<string, unknown> | null;
+  if (!payload) return false;
+  return Boolean(payload.error) || Boolean(payload.lastCommandError);
 }
 
 function eventDetail(event: WorkspaceEvent): string {
@@ -56,16 +81,52 @@ function eventDetail(event: WorkspaceEvent): string {
 
   if (event.type === "session_ended") {
     const sessionId = payload.sessionId;
-    if (typeof sessionId === "string") return sessionId.slice(0, 8);
+    const endNote = payload.endNote;
+    const parts: string[] = [];
+    if (typeof sessionId === "string") parts.push(sessionId.slice(0, 8));
+    if (typeof endNote === "string" && endNote.trim()) parts.push(endNote.trim());
+    return parts.join(" — ");
+  }
+
+  if (event.type === "sync_completed") {
+    const durationMs = payload.durationMs;
+    if (typeof durationMs === "number") return formatDuration(durationMs);
+  }
+
+  if (event.type === "repo_refreshed") {
+    const repoPath = payload.repoPath;
+    if (typeof repoPath === "string") return repoPath === "all" ? "All repos" : repoPath;
   }
 
   return "";
 }
 
 export function ActivityPage({ events, syncSettings, repoDiagnostics }: ActivityPageProps) {
-  const recentEvents = [...events]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50);
+  const [filter, setFilter] = useState<ActivityFilter>("all");
+
+  const sortedEvents = useMemo(
+    () => [...events].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [events],
+  );
+
+  const filteredEvents = useMemo(() => {
+    let filtered = sortedEvents;
+    switch (filter) {
+      case "sessions":
+        filtered = sortedEvents.filter((e) => SESSION_TYPES.includes(e.type));
+        break;
+      case "sync":
+        filtered = sortedEvents.filter((e) => SYNC_TYPES.includes(e.type));
+        break;
+      case "repos":
+        filtered = sortedEvents.filter((e) => REPO_TYPES.includes(e.type));
+        break;
+      case "errors":
+        filtered = sortedEvents.filter(isErrorEvent);
+        break;
+    }
+    return filtered.slice(0, 50);
+  }, [sortedEvents, filter]);
 
   const lastSyncOk = syncSettings.lastSyncAt && !syncSettings.lastSyncError;
   const lastSyncFailed = Boolean(syncSettings.lastSyncError);
@@ -143,21 +204,39 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
             <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
               Event Timeline
             </h3>
-            <span className="text-sm text-text-muted">{recentEvents.length} events</span>
+            <span className="text-sm text-text-muted">{filteredEvents.length} events</span>
           </div>
 
-          {recentEvents.length === 0 ? (
+          <div className="mb-4 flex items-center gap-1">
+            {(Object.keys(FILTER_LABELS) as ActivityFilter[]).map((key) => (
+              <button
+                key={key}
+                className={`rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                  filter === key
+                    ? "bg-accent text-white"
+                    : "bg-surface-2 text-text-secondary hover:bg-surface-3 hover:text-text-primary"
+                }`}
+                onClick={() => setFilter(key)}
+              >
+                {FILTER_LABELS[key]}
+              </button>
+            ))}
+          </div>
+
+          {filteredEvents.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-10 text-center">
               <p className="text-sm text-text-muted">
-                No events yet. Start a session or run Sync Now to create the first event.
+                {filter === "all"
+                  ? "No events yet. Start a session or run Sync Now to create the first event."
+                  : `No ${FILTER_LABELS[filter].toLowerCase()} events found.`}
               </p>
             </div>
           ) : (
             <div className="rounded-lg border border-border bg-surface-1 overflow-hidden">
-              {recentEvents.map((event, index) => (
+              {filteredEvents.map((event, index) => (
                 <div
                   key={event.id}
-                  className={`flex items-start gap-4 px-5 py-3.5 ${index < recentEvents.length - 1 ? "border-b border-border" : ""}`}
+                  className={`flex items-start gap-4 px-5 py-3.5 ${index < filteredEvents.length - 1 ? "border-b border-border" : ""}`}
                 >
                   <div className="mt-0.5 shrink-0">
                     <EventIcon type={event.type} />

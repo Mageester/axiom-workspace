@@ -70,6 +70,7 @@ export interface WorkSession {
   userName: string;
   title: string;
   notes?: string;
+  endNote?: string;
   branch?: string;
   targets: LockTarget[];
   status: SessionStatus;
@@ -149,7 +150,9 @@ export type WorkspaceEventType =
   | "session_ended"
   | "session_updated"
   | "note_added"
-  | "snapshot_created";
+  | "snapshot_created"
+  | "sync_completed"
+  | "repo_refreshed";
 
 export interface WorkspaceEvent {
   id: string;

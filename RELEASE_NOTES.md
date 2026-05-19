@@ -1,73 +1,63 @@
-# Axiom Workspace 0.1.0
+# Axiom Workspace v0.2.0
 
-Status: internal beta for Riley testing. Not a public release.
+Status: internal beta for Aidan and Riley.
 
-## Included
+## New in v0.2.0
 
-- Windows desktop app built with Tauri and React.
-- Repo status dashboard for local Git repositories.
-- Dirty repo diagnostics with changed file summaries.
-- Work sessions with notes, branches, and lock targets.
-- Soft locks for files and folders.
-- Overlap warnings for active session targets.
-- Zero-cost GitHub sync for coordination state.
-- First-run setup for user identity, device name, Git checks, and sync connection.
-- Settings reset tools for setup, sessions/locks, sync state, and full local app data.
-- Windows installer build output.
+- Repo nicknames: edit display names for tracked repos inline on repo cards.
+- Session handoff notes: add an optional handoff note when ending a session.
+- Edit session notes on active sessions without restarting.
+- Activity timeline filters: All, Sessions, Sync, Repos, Errors.
+- Sync completions and repo refreshes now appear in the activity timeline.
+- Version bumped to 0.2.0 across all manifests.
 
-## Not Included Yet
+## Carried from v0.1.0
 
-- Public release packaging or marketing page.
-- Paid backend, database, or hosted sync service.
-- Source code sync.
-- Project file sync.
-- Credential or token management inside the app.
-- Hard enforcement of locks in Git.
-- Multi-team administration.
+- Hidden git process windows on Windows.
+- Parallel repo status checks for faster Refresh All.
+- Full Dashboard with team sync status, stat cards, and active session overview.
+- Repos page with add, remove, refresh, open folder, copy path.
+- Sessions page with duration tracking and overlap warnings.
+- Locks page grouped by repo.
+- Activity page with summary cards and event timeline.
+- Settings page with diagnostics, setup checklist, and reset controls.
+- Onboarding flow with Git, GitHub, and sync validation.
+- Sidebar with dynamic sync status and active session count.
+- Confirmation dialogs on all destructive actions.
+
+## Safety Guarantees
+
+- Project repos are read-only: Axiom never runs git write commands on your projects.
+- Only the validated sync repo (axiom-workspace-sync) receives git writes.
+- No paid APIs, cloud databases, or external services.
+- All data stored locally in localStorage and AppData.
+- Manual Sync Now only (no background auto-sync).
 
 ## Known Limitations
 
 - Soft locks are advisory coordination signals only.
 - Git and GitHub access must already work on the tester machine.
 - If Git is installed after the app starts, the app may need to be restarted before Git is detected.
-- Sync may ask the tester to run `Sync Now` again if remote updates arrive during the same sync operation.
+- Sync may ask the tester to run Sync Now again if remote updates arrive during the same sync operation.
 - Resetting local app data does not uninstall the app and does not remove project repositories.
-
-## Riley Testing Checklist
-
-- Install with the NSIS setup executable.
-- Complete first-run setup.
-- Confirm Git missing messaging if practical.
-- Connect to Axiom Team Workspace.
-- Add a local test repo.
-- Start a session with at least one lock target.
-- Run `Sync Now`.
-- Confirm Aidan sees Riley's session.
-- Confirm Riley sees Aidan's session.
-- Make a harmless dirty repo change and confirm the app explains it.
-- Test full local app data reset.
-- Report bugs and UX feedback through GitHub issues.
 
 ## Installer Filenames
 
 ```text
-Axiom Workspace_0.1.0_x64-setup.exe
-Axiom Workspace_0.1.0_x64_en-US.msi
+Axiom Workspace_0.2.0_x64-setup.exe
+Axiom Workspace_0.2.0_x64_en-US.msi
 ```
 
 Expected local output paths:
 
 ```text
-src-tauri/target/release/bundle/nsis/Axiom Workspace_0.1.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Axiom Workspace_0.1.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Axiom Workspace_0.2.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_0.2.0_x64_en-US.msi
 ```
 
-## GitHub Release Prep Checklist
+## GitHub Release Prep
 
 - Build installer with `npm run tauri build`.
-- Attach NSIS `.exe`.
-- Attach MSI.
-- Tag `v0.1.0-beta`.
-- Mark the GitHub release as pre-release/internal beta.
-- Include a short note that this is for controlled Riley testing only.
-- Do not upload release assets from an unsafe or unverified environment.
+- Attach NSIS `.exe` and MSI.
+- Tag `v0.2.0-beta`.
+- Mark as pre-release/internal beta.

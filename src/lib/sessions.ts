@@ -49,6 +49,7 @@ function isWorkSession(value: unknown): value is WorkSession {
     typeof session.userName === "string" &&
     typeof session.title === "string" &&
     (session.notes === undefined || typeof session.notes === "string") &&
+    (session.endNote === undefined || typeof session.endNote === "string") &&
     (session.branch === undefined || typeof session.branch === "string") &&
     Array.isArray(session.targets) &&
     session.targets.every(isLockTarget) &&
@@ -114,40 +115,51 @@ export function createSession(input: CreateSessionInput): WorkSession {
   };
 }
 
-export function endSession(sessionId: string): WorkSession[];
+export function endSession(sessionId: string, endNote?: string): WorkSession[];
 export function endSession(
   sessions: WorkSession[],
   sessionId: string,
+  endNote?: string,
 ): WorkSession[];
 export function endSession(
   sessionsOrSessionId: WorkSession[] | string,
-  maybeSessionId?: string,
+  secondArg?: string,
+  thirdArg?: string,
 ): WorkSession[] {
-  const sessions =
-    typeof sessionsOrSessionId === "string"
-      ? loadSessions()
-      : sessionsOrSessionId;
-  const sessionId =
-    typeof sessionsOrSessionId === "string"
-      ? sessionsOrSessionId
-      : maybeSessionId;
+  const isFirstArgString = typeof sessionsOrSessionId === "string";
+  const sessions = isFirstArgString ? loadSessions() : sessionsOrSessionId;
+  const sessionId = isFirstArgString ? sessionsOrSessionId : secondArg;
+  const endNote = isFirstArgString ? secondArg : thirdArg;
 
   if (!sessionId) {
     return sessions;
   }
 
   const endedAt = new Date().toISOString();
+  const trimmedNote = endNote?.trim() || undefined;
   const next: WorkSession[] = sessions.map((session) =>
     session.id === sessionId && session.status === "active"
-      ? { ...session, status: "ended" as const, endedAt }
+      ? { ...session, status: "ended" as const, endedAt, endNote: trimmedNote }
       : session,
   );
 
-  if (typeof sessionsOrSessionId === "string") {
+  if (isFirstArgString) {
     saveSessions(next);
   }
 
   return next;
+}
+
+export function updateSessionNotes(
+  sessions: WorkSession[],
+  sessionId: string,
+  notes: string,
+): WorkSession[] {
+  return sessions.map((session) =>
+    session.id === sessionId
+      ? { ...session, notes: notes.trim() || undefined }
+      : session,
+  );
 }
 
 export function getActiveSessions(sessions: WorkSession[]): WorkSession[] {

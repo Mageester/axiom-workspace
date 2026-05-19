@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -8,10 +9,12 @@ import {
   FolderOpen,
   GitBranch,
   Loader2,
+  Pencil,
   Play,
   RefreshCw,
   Timer,
   Trash2,
+  X,
 } from "lucide-react";
 import { revealItemInDir, openPath } from "@tauri-apps/plugin-opener";
 import type { LiveRepo, RepoChangeKind, WorkSession } from "../types";
@@ -20,11 +23,13 @@ import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
 
 interface RepoCardProps {
   repo: LiveRepo;
+  nickname?: string;
   refreshing: boolean;
   activeSessions: WorkSession[];
   onRefresh: () => void;
   onRemove: () => void;
   onStartSession: () => void;
+  onRename?: (name: string) => void;
 }
 
 const changeKindLabels: Record<RepoChangeKind, string> = {
@@ -75,15 +80,20 @@ async function copyToClipboard(text: string) {
 
 export function RepoCard({
   repo,
+  nickname,
   refreshing,
   activeSessions,
   onRefresh,
   onRemove,
   onStartSession,
+  onRename,
 }: RepoCardProps) {
   const hasActiveSessions = activeSessions.length > 0;
   const [detailsOpen, setDetailsOpen] = useState(repo.status === "dirty");
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const editRef = useRef<HTMLInputElement>(null);
   const hasDirtyFiles = repo.status === "dirty" && repo.changedFileCount > 0;
   const hasDetails =
     hasDirtyFiles ||
@@ -123,9 +133,59 @@ export function RepoCard({
     >
       <div className="mb-3 flex items-start justify-between">
         <div className="mr-3 min-w-0 flex-1">
-          <h3 className="truncate text-sm font-medium text-text-primary">
-            {repo.name}
-          </h3>
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                ref={editRef}
+                className="w-full rounded border border-accent bg-surface-0 px-1.5 py-0.5 text-sm font-medium text-text-primary outline-none"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onRename?.(editValue);
+                    setEditing(false);
+                  }
+                  if (e.key === "Escape") setEditing(false);
+                }}
+              />
+              <button
+                className={iconBtnClass}
+                title="Save"
+                onClick={() => {
+                  onRename?.(editValue);
+                  setEditing(false);
+                }}
+              >
+                <Check size={12} />
+              </button>
+              <button
+                className={iconBtnClass}
+                title="Cancel"
+                onClick={() => setEditing(false)}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-medium text-text-primary">
+                {nickname || repo.name}
+              </h3>
+              {onRename && (
+                <button
+                  className={`${iconBtnClass} shrink-0`}
+                  title="Edit display name"
+                  onClick={() => {
+                    setEditValue(nickname || repo.name);
+                    setEditing(true);
+                    setTimeout(() => editRef.current?.select(), 0);
+                  }}
+                >
+                  <Pencil size={10} />
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-1 flex items-center gap-1.5 min-w-0">
             <p className="truncate text-xs text-text-muted">{repo.path}</p>
             <button
