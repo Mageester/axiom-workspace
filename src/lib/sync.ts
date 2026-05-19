@@ -40,6 +40,7 @@ export interface SyncRepoSetupResult {
   ok: boolean;
   syncLocalPath: string;
   message: string;
+  recovered: boolean;
 }
 
 export interface SyncRepoValidation {
@@ -478,6 +479,18 @@ export async function validateSyncRepo(
   return invoke<SyncRepoValidation>("validate_sync_repo", {
     path,
     expectedRepoUrl,
+  });
+}
+
+export async function validateSyncWriteAccess(
+  path: string,
+  deviceId: string,
+  expectedRepoUrl = DEFAULT_SYNC_REPO_URL,
+): Promise<SyncRepoValidation> {
+  return invoke<SyncRepoValidation>("validate_sync_write_access", {
+    path,
+    expectedRepoUrl,
+    deviceId,
   });
 }
 

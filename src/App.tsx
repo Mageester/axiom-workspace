@@ -35,7 +35,6 @@ import {
   createWorkspaceEvent,
   dedupeEvents,
   DEFAULT_SYNC_REPO_URL,
-  ensureSyncStructure,
   getDefaultSyncPath,
   loadEvents,
   loadSetupState,
@@ -49,6 +48,7 @@ import {
   syncNow,
   validateGithubAccess,
   validateSyncRepo,
+  validateSyncWriteAccess,
 } from "./lib/sync";
 
 const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
@@ -74,10 +74,10 @@ function createChecklist(state: SetupState): SetupChecklistItem[] {
     },
     {
       key: "github",
-      label: "GitHub access ready",
+      label: "GitHub upload access ready",
       status: state.setupComplete ? "complete" : "needs_action",
       message:
-        "Axiom checks access to the team sync workspace before connecting.",
+        "Axiom verifies read access first, then confirms it can upload sync changes.",
     },
     {
       key: "syncWorkspace",
@@ -209,7 +209,7 @@ function App() {
         status: git.installed ? "complete" : "missing",
         message: git.installed
           ? git.message
-          : "Git is needed for free team sync. Axiom Workspace uses GitHub to share sessions and locks without a paid database.",
+          : "Git is needed for free team sync. You may need to restart Axiom Workspace so Git is available.",
       });
       updateChecklistItem("syncFolder", {
         status: setupState.syncLocalPath ? "complete" : "needs_action",
@@ -219,13 +219,13 @@ function App() {
       if (validateGithub && git.installed) {
         updateChecklistItem("github", {
           status: "checking",
-          message: "Checking access to the Axiom team sync workspace.",
+          message: "Checking read access to the Axiom team sync workspace.",
         });
         const access = await validateGithubAccess(
           setupState.syncRepoUrl || DEFAULT_SYNC_REPO_URL,
         );
         updateChecklistItem("github", {
-          status: access.ok ? "complete" : "error",
+          status: access.ok ? "needs_action" : "error",
           message: access.message,
         });
       }
@@ -259,16 +259,18 @@ function App() {
         updateChecklistItem("git", {
           status: "missing",
           message:
-            "Git is needed for free team sync. Install Git, then click Re-check.",
+            "Git is needed for free team sync. Install Git, then restart Axiom Workspace if Re-check does not find it.",
         });
-        setSetupError("Install Git, then click Re-check.");
+        setSetupError(
+          "Install Git, then click Re-check. You may need to restart Axiom Workspace so Git is available.",
+        );
         return;
       }
       updateChecklistItem("git", { status: "complete", message: git.message });
 
       updateChecklistItem("github", {
         status: "checking",
-        message: "Checking access to the Axiom team sync workspace.",
+        message: "Checking read access to the Axiom team sync workspace.",
       });
       const access = await validateGithubAccess(
         setupState.syncRepoUrl || DEFAULT_SYNC_REPO_URL,
@@ -282,7 +284,7 @@ function App() {
         return;
       }
       updateChecklistItem("github", {
-        status: "complete",
+        status: "checking",
         message: access.message,
       });
 
@@ -300,13 +302,30 @@ function App() {
         return;
       }
 
-      await ensureSyncStructure(setup.syncLocalPath);
       const validation = await validateSyncRepo(
         setup.syncLocalPath,
         setupState.syncRepoUrl,
       );
       if (!validation.ok) {
         throw new Error(validation.message);
+      }
+
+      updateChecklistItem("github", {
+        status: "checking",
+        message: "Verifying GitHub upload access.",
+      });
+      const writeAccess = await validateSyncWriteAccess(
+        setup.syncLocalPath,
+        identity.deviceId,
+        setupState.syncRepoUrl,
+      );
+      if (!writeAccess.ok) {
+        updateChecklistItem("github", {
+          status: "error",
+          message: writeAccess.message,
+        });
+        setSetupError(writeAccess.message);
+        return;
       }
 
       const nextSetupState: SetupState = {
@@ -325,10 +344,14 @@ function App() {
         syncLocalPath: nextSetupState.syncLocalPath,
         autoSyncEnabled: false,
       });
-      setSetupMessage("Axiom team sync workspace is connected.");
+      setSetupMessage(setup.message);
+      updateChecklistItem("github", {
+        status: "complete",
+        message: writeAccess.message,
+      });
       updateChecklistItem("syncWorkspace", {
         status: "complete",
-        message: "Axiom team sync workspace is connected.",
+        message: setup.message,
       });
       updateChecklistItem("syncFolder", {
         status: "complete",

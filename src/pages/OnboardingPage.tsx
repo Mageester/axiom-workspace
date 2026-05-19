@@ -110,7 +110,7 @@ export function OnboardingPage({
               </h2>
               <p className="mt-1 text-sm leading-6 text-text-muted">
                 Axiom checks what is installed, skips anything already ready,
-                and asks before opening a download page.
+                verifies upload access, and asks before opening a download page.
               </p>
             </div>
 
@@ -220,6 +220,11 @@ export function OnboardingPage({
                   <Download size={14} />
                   Install Git
                 </button>
+              )}
+              {gitMissing && (
+                <p className="w-full text-xs leading-5 text-text-muted">
+                  You may need to restart Axiom Workspace so Git is available.
+                </p>
               )}
             </div>
           </div>

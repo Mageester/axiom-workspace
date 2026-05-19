@@ -14,6 +14,7 @@ pub fn run() {
             sync::get_default_sync_path,
             sync::setup_sync_repo,
             sync::validate_sync_repo,
+            sync::validate_sync_write_access,
             sync::ensure_sync_structure,
             sync::sync_now,
         ])

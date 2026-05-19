@@ -307,7 +307,7 @@ export function SettingsPage({
               onClick={() => void onValidateSetup()}
             >
               <CheckCircle2 size={14} />
-              Validate Setup
+              Validate Read Access
             </button>
             {!setupState.setupComplete && (
               <button className={secondaryBtnClass} onClick={onResetSetup}>
