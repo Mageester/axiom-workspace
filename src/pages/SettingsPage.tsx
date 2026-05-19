@@ -26,6 +26,10 @@ interface SettingsPageProps {
   settings: SyncSettings;
   syncStatus: SyncStatus;
   eventCount: number;
+  appVersion: string;
+  gitVersion: string;
+  repoCount: number;
+  activeSessionCount: number;
   onIdentityChange: (identity: DeviceIdentity) => void;
   onSetupChange: (setupState: SetupState) => void;
   onSettingsChange: (settings: SyncSettings) => void;
@@ -99,6 +103,10 @@ export function SettingsPage({
   settings,
   syncStatus,
   eventCount,
+  appVersion,
+  gitVersion,
+  repoCount,
+  activeSessionCount,
   onIdentityChange,
   onSetupChange,
   onSettingsChange,
@@ -115,6 +123,22 @@ export function SettingsPage({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const syncing =
     syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
+  const lastError =
+    settings.lastSyncError || setupState.lastError || "No recent errors";
+  const diagnostics = [
+    { label: "App version", value: appVersion },
+    {
+      label: "Setup",
+      value: setupState.setupComplete ? "Connected" : "Needs setup",
+    },
+    { label: "Sync status", value: syncStatusLabel(syncStatus) },
+    { label: "Sync repo path", value: settings.syncLocalPath || "Not connected" },
+    { label: "Git version", value: gitVersion || "Not checked yet" },
+    { label: "Repos tracked", value: String(repoCount) },
+    { label: "Active sessions", value: String(activeSessionCount) },
+    { label: "Last sync", value: formatDateTime(settings.lastSyncAt) },
+    { label: "Last error", value: lastError },
+  ];
 
   function saveIdentity() {
     onIdentityChange({
@@ -335,6 +359,33 @@ export function SettingsPage({
                 Reconnect
               </button>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+              Diagnostics
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+              A quick health snapshot for setup, sync, and local coordination.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {diagnostics.map((item) => (
+              <div
+                key={item.label}
+                className="rounded-md border border-border bg-surface-0 px-3 py-3"
+              >
+                <p className="text-xs uppercase tracking-wide text-text-muted">
+                  {item.label}
+                </p>
+                <p className="mt-1 break-words text-sm text-text-primary">
+                  {item.value}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
 

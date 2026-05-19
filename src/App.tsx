@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DeviceIdentity,
   LiveRepo,
@@ -60,6 +60,8 @@ const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
   activity: "Activity",
   settings: "Settings",
 };
+
+const APP_VERSION = "0.1.0";
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -127,7 +129,9 @@ function App() {
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupMessage, setSetupMessage] = useState("");
   const [setupError, setSetupError] = useState("");
+  const [gitVersion, setGitVersion] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const syncInFlightRef = useRef(false);
   const {
     repos,
     loading,
@@ -152,9 +156,7 @@ function App() {
   }, [setupState]);
 
   useEffect(() => {
-    if (!setupState.setupComplete) {
-      void runSetupCheck(false);
-    }
+    void runSetupCheck(false);
     // Run once on startup; setupState changes are handled by direct updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -207,6 +209,7 @@ function App() {
         checkGitInstalled(),
         getDefaultSyncPath(),
       ]);
+      setGitVersion(git.version || git.message || "");
       updateChecklistItem("git", {
         status: git.installed ? "complete" : "missing",
         message: git.installed
@@ -257,6 +260,7 @@ function App() {
     try {
       updateChecklistItem("git", { status: "checking", message: "Checking Git." });
       const git = await checkGitInstalled();
+      setGitVersion(git.version || git.message || "");
       if (!git.installed) {
         updateChecklistItem("git", {
           status: "missing",
@@ -436,26 +440,32 @@ function App() {
   }
 
   async function handleSyncNow() {
-    if (!setupState.setupComplete || !syncSettings.syncLocalPath.trim()) {
-      const message =
-        "Axiom is local-only until the team sync workspace is connected.";
-      setSyncStatus("error");
-      persistSyncSettings({
-        ...syncSettings,
-        lastSyncStatus: "Error",
-        lastSyncError: message,
-      });
+    if (syncInFlightRef.current) {
       return;
     }
 
-    setSyncStatus("checking");
-    persistSyncSettings({
-      ...syncSettings,
-      lastSyncStatus: "Checking",
-      lastSyncError: undefined,
-    });
+    syncInFlightRef.current = true;
 
     try {
+      if (!setupState.setupComplete || !syncSettings.syncLocalPath.trim()) {
+        const message =
+          "Axiom is local-only until the team sync workspace is connected.";
+        setSyncStatus("error");
+        persistSyncSettings({
+          ...syncSettings,
+          lastSyncStatus: "Error",
+          lastSyncError: message,
+        });
+        return;
+      }
+
+      setSyncStatus("checking");
+      persistSyncSettings({
+        ...syncSettings,
+        lastSyncStatus: "Checking",
+        lastSyncError: undefined,
+      });
+
       const validation = await validateSyncRepo(
         syncSettings.syncLocalPath,
         syncSettings.syncRepoUrl,
@@ -502,6 +512,8 @@ function App() {
         lastSyncError: message,
       });
       setSyncStatus("error");
+    } finally {
+      syncInFlightRef.current = false;
     }
   }
 
@@ -594,6 +606,10 @@ function App() {
           settings={syncSettings}
           syncStatus={syncStatus}
           eventCount={events.length}
+          appVersion={APP_VERSION}
+          gitVersion={gitVersion}
+          repoCount={repos.length}
+          activeSessionCount={activeSessions.length}
           onIdentityChange={persistIdentity}
           onSetupChange={persistSetupState}
           onSettingsChange={persistSyncSettings}

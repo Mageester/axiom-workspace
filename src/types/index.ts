@@ -1,5 +1,11 @@
 export type RepoStatus = "clean" | "dirty" | "behind" | "locked" | "error";
 export type UpstreamStatus = "ok" | "missing" | "error";
+export type RepoChangeKind =
+  | "added"
+  | "deleted"
+  | "modified"
+  | "renamed"
+  | "untracked";
 
 export type NavPage =
   | "dashboard"
@@ -22,9 +28,18 @@ export interface LiveRepo {
   isDetachedHead: boolean;
   ahead: number;
   behind: number;
+  changedFileCount: number;
+  changedFiles: RepoChangedFile[];
+  hasMoreChangedFiles: boolean;
   status: RepoStatus;
   lastCheckedAt: string;
   errorMessage: string | null;
+}
+
+export interface RepoChangedFile {
+  path: string;
+  oldPath?: string | null;
+  kind: RepoChangeKind;
 }
 
 export type SessionStatus = "active" | "ended";

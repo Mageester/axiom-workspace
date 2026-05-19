@@ -233,7 +233,7 @@ export function Dashboard({
             <div className="flex items-center justify-center h-64 rounded-lg border border-dashed border-border">
               <div className="flex items-center gap-2 text-sm text-text-muted">
                 <Loader2 size={16} className="animate-spin" />
-                Loading repositories…
+                Loading repositories...
               </div>
             </div>
           ) : repos.length === 0 ? (
