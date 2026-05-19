@@ -1,59 +1,141 @@
 # Axiom Workspace
 
-Axiom Workspace is an internal Windows desktop app for coordinating work across Aidan and Riley. It tracks local repositories, work sessions, soft locks, notes, and shared coordination events without syncing source code.
+Axiom Workspace is an internal Windows desktop app for coordinating active work across the Axiom team. It helps Aidan and Riley see who is working where, which files or folders are being touched, and when local repositories need attention before work overlaps.
 
-## Team Sync
+The app is currently in internal beta for controlled Riley testing. It is ready to share for testing, but it is not a public release.
 
-Axiom Workspace uses Git and GitHub for zero-cost team sync:
+## What Problem It Solves
 
-- Default sync repo: `https://github.com/Mageester/axiom-workspace-sync`
-- Default local sync folder: the app data folder, for example `AppData/Local/Axiom Workspace/sync`
-- Synced data: sessions, locks, notes, activity events, and identity/device metadata
-- Not synced: source code files, project repo contents, GitHub passwords, or tokens
+Small team development often breaks down because local work is invisible until a branch, commit, pull request, or merge conflict appears. Axiom Workspace gives the team a lightweight coordination layer before that point:
 
-On first run, the app checks setup health, asks for a user display name and device name, verifies Git, verifies access to the sync repo, and connects the local app-data sync folder automatically.
+- Which repos are clean, dirty, behind, locked, or having Git errors.
+- Which work sessions are active.
+- Which files or folders are soft-locked by another teammate.
+- Whether a new session overlaps an existing active lock.
+- What changed locally in a dirty repo, without syncing the source code itself.
 
-## Riley Setup
+## Sync Scope
 
-1. Install and open Axiom Workspace.
-2. Enter your name and device name.
-3. Click **Connect to Axiom Team Workspace**.
-4. If Git is missing, click **Install Git**, install Git for Windows, then click **Re-check Git**.
-5. Once connected, use **Sync Now** to share sessions and locks.
+Axiom Workspace uses Git and GitHub for zero-cost team sync through the Axiom team workspace sync repo.
 
-## How to fully reset local app data on Windows
+Synced:
 
-Uninstalling Axiom Workspace may keep local setup data, sync settings, sessions, locks, and cached app state. When testing a fresh installer, open **Settings → Advanced Sync Settings → Reset** and use **Full reset local app data**. This clears Axiom Workspace local browser storage and reloads the app. It does not delete project repos, source code, or the sync repo folder.
+- Work sessions
+- Soft locks
+- Notes and coordination events
+- Basic identity/device metadata used by the app
 
-For a manual reset, close Axiom Workspace and remove these app data folders if they exist:
+Not synced:
 
-- `%LOCALAPPDATA%\Axiom Workspace`
-- `%APPDATA%\Axiom Workspace`
+- Source code
+- Project files
+- Credentials, passwords, or tokens
+- Full local repo contents
 
-Do not delete project repository folders when resetting local app data.
+The sync repo stores coordination state only. Project repositories remain normal local Git repositories.
 
-## Development
+## Main Features
+
+- Repo status dashboard for local project health.
+- Dirty file diagnostics that explain uncommitted local changes.
+- Work sessions with titles, notes, branches, and lock targets.
+- Soft locks for files and folders.
+- Overlap warnings before starting conflicting work.
+- Zero-cost GitHub sync using Git instead of a paid backend.
+- First-run setup for name, device, Git checks, and sync connection.
+- Windows installer output from Tauri.
+
+## Developer Setup
+
+Prerequisites:
+
+- Windows 10 or Windows 11
+- Node.js and npm
+- Rust toolchain
+- Git for Windows
+- GitHub access to the app repo and the Axiom sync repo
+
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Run the app in development mode:
+
+```bash
 npm run tauri dev
 ```
 
-## Checks
+Run the frontend only:
+
+```bash
+npm run dev
+```
+
+## Build Instructions
+
+Frontend/typecheck build:
 
 ```bash
 npm run build
+```
+
+Rust/Tauri check:
+
+```bash
 cd src-tauri
 cargo check
 ```
 
-## Build
+Windows installer build:
 
 ```bash
 npm run tauri build
 ```
 
-## Architecture
+## Installer Output
+
+Tauri writes Windows installer artifacts under:
+
+```text
+src-tauri/target/release/bundle/
+```
+
+Expected 0.1.0 installer filenames:
+
+```text
+src-tauri/target/release/bundle/nsis/Axiom Workspace_0.1.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_0.1.0_x64_en-US.msi
+```
+
+## Reset Local Data
+
+Uninstalling Axiom Workspace may leave local setup data, sync state, sessions, locks, and cached browser storage. For clean tester setup, use:
+
+```text
+Settings -> Advanced Sync Settings -> Reset -> Full reset local app data
+```
+
+Manual Windows reset, if needed:
+
+```text
+%LOCALAPPDATA%\Axiom Workspace
+%APPDATA%\Axiom Workspace
+```
+
+Close the app before manually deleting those folders. Do not delete project repository folders when resetting local app data.
+
+## Safety Notes
+
+- Axiom Workspace reads project repo status, but does not sync project source code.
+- Soft locks are coordination warnings, not enforced Git locks.
+- GitHub authentication is handled by Git and Git Credential Manager.
+- The app should not store GitHub passwords or tokens.
+- Sync conflicts may require running Sync Now again if remote updates arrive mid-sync.
+- This beta should only be shared with known internal testers.
+
+## Project Layout
 
 ```text
 src/                    React frontend
