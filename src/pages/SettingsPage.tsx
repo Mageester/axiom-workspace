@@ -16,6 +16,7 @@ import type {
   SetupStatus,
   SyncSettings,
   SyncStatus,
+  RepoDiagnostics,
 } from "../types";
 import { PageHeader } from "../components/PageHeader";
 import { primaryBtnClass, secondaryBtnClass } from "../lib/constants";
@@ -30,6 +31,7 @@ interface SettingsPageProps {
   gitVersion: string;
   repoCount: number;
   activeSessionCount: number;
+  repoDiagnostics: RepoDiagnostics;
   onIdentityChange: (identity: DeviceIdentity) => void;
   onSetupChange: (setupState: SetupState) => void;
   onSettingsChange: (settings: SyncSettings) => void;
@@ -62,6 +64,16 @@ function formatDateTime(value?: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatDuration(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "Not recorded yet";
+  }
+  if (value < 1000) {
+    return `${Math.round(value)} ms`;
+  }
+  return `${(value / 1000).toFixed(1)} s`;
 }
 
 function syncStatusLabel(status: SyncStatus): string {
@@ -107,6 +119,7 @@ export function SettingsPage({
   gitVersion,
   repoCount,
   activeSessionCount,
+  repoDiagnostics,
   onIdentityChange,
   onSetupChange,
   onSettingsChange,
@@ -137,7 +150,37 @@ export function SettingsPage({
     { label: "Repos tracked", value: String(repoCount) },
     { label: "Active sessions", value: String(activeSessionCount) },
     { label: "Last sync", value: formatDateTime(settings.lastSyncAt) },
+    { label: "Last sync duration", value: formatDuration(settings.lastSyncDurationMs) },
+    {
+      label: "Last sync Git commands",
+      value:
+        typeof settings.lastSyncGitCommandCount === "number"
+          ? String(settings.lastSyncGitCommandCount)
+          : "Not recorded yet",
+    },
+    {
+      label: "Last repo refresh",
+      value: repoDiagnostics.lastRefreshRepoPath || "Not recorded yet",
+    },
+    {
+      label: "Last repo refresh duration",
+      value: formatDuration(repoDiagnostics.lastRefreshDurationMs),
+    },
+    {
+      label: "Last repo Git commands",
+      value:
+        typeof repoDiagnostics.gitCommandCount === "number"
+          ? String(repoDiagnostics.gitCommandCount)
+          : "Not recorded yet",
+    },
     { label: "Last error", value: lastError },
+    {
+      label: "Last command error",
+      value:
+        settings.lastSyncCommandError ||
+        repoDiagnostics.lastCommandError ||
+        "No recent command errors",
+    },
   ];
 
   function saveIdentity() {
@@ -336,11 +379,12 @@ export function SettingsPage({
               ) : (
                 <RefreshCw size={14} />
               )}
-              Sync Now
+              {syncing ? "Syncing..." : "Sync Now"}
             </button>
             <button
               className={secondaryBtnClass}
               onClick={() => void onValidateSetup()}
+              disabled={syncing}
             >
               <CheckCircle2 size={14} />
               Validate Read Access

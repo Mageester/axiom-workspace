@@ -56,6 +56,9 @@ export interface SyncNowResult {
   events: WorkspaceEvent[];
   skipped: number;
   committed: boolean;
+  durationMs: number;
+  gitCommandCount: number;
+  lastCommandError?: string | null;
 }
 
 function createId(): string {
@@ -343,6 +346,18 @@ export function loadSyncSettings(): SyncSettings {
         lastSyncError:
           typeof parsed.lastSyncError === "string"
             ? parsed.lastSyncError
+            : undefined,
+        lastSyncDurationMs:
+          typeof parsed.lastSyncDurationMs === "number"
+            ? parsed.lastSyncDurationMs
+            : undefined,
+        lastSyncGitCommandCount:
+          typeof parsed.lastSyncGitCommandCount === "number"
+            ? parsed.lastSyncGitCommandCount
+            : undefined,
+        lastSyncCommandError:
+          typeof parsed.lastSyncCommandError === "string"
+            ? parsed.lastSyncCommandError
             : undefined,
       };
     }

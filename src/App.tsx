@@ -49,7 +49,6 @@ import {
   setupSyncRepo,
   syncNow,
   validateGithubAccess,
-  validateSyncRepo,
   validateSyncWriteAccess,
 } from "./lib/sync";
 
@@ -127,15 +126,19 @@ function App() {
     createChecklist(loadSetupState()),
   );
   const [setupBusy, setSetupBusy] = useState(false);
+  const [setupChecking, setSetupChecking] = useState(false);
   const [setupMessage, setSetupMessage] = useState("");
   const [setupError, setSetupError] = useState("");
   const [gitVersion, setGitVersion] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const syncInFlightRef = useRef(false);
+  const setupInFlightRef = useRef(false);
+  const setupCheckInFlightRef = useRef(false);
   const {
     repos,
     loading,
     refreshingPaths,
+    diagnostics: repoDiagnostics,
     addRepo,
     removeRepo,
     refreshRepo,
@@ -197,6 +200,11 @@ function App() {
   }
 
   async function runSetupCheck(validateGithub: boolean) {
+    if (setupCheckInFlightRef.current || setupInFlightRef.current) {
+      return;
+    }
+    setupCheckInFlightRef.current = true;
+    setSetupChecking(true);
     setSetupError("");
     updateChecklistItem("git", { status: "checking", message: "Checking Git." });
     updateChecklistItem("syncFolder", {
@@ -240,10 +248,16 @@ function App() {
         status: "error",
         message: "Axiom could not check Git. Try Re-check Git.",
       });
+    } finally {
+      setupCheckInFlightRef.current = false;
+      setSetupChecking(false);
     }
   }
 
   async function handleConnectWorkspace() {
+    if (setupInFlightRef.current) {
+      return;
+    }
     const identity = setupState.identity;
     if (!identity.userName.trim() || !identity.deviceName.trim()) {
       setSetupError("Enter your name and device name, then connect.");
@@ -254,6 +268,7 @@ function App() {
       return;
     }
 
+    setupInFlightRef.current = true;
     setSetupBusy(true);
     setSetupMessage("");
     setSetupError("");
@@ -306,14 +321,6 @@ function App() {
         });
         setSetupError(setup.message);
         return;
-      }
-
-      const validation = await validateSyncRepo(
-        setup.syncLocalPath,
-        setupState.syncRepoUrl,
-      );
-      if (!validation.ok) {
-        throw new Error(validation.message);
       }
 
       updateChecklistItem("github", {
@@ -381,6 +388,7 @@ function App() {
       setSetupError(message);
       updateChecklistItem("syncWorkspace", { status: "error", message });
     } finally {
+      setupInFlightRef.current = false;
       setSetupBusy(false);
     }
   }
@@ -466,14 +474,6 @@ function App() {
         lastSyncError: undefined,
       });
 
-      const validation = await validateSyncRepo(
-        syncSettings.syncLocalPath,
-        syncSettings.syncRepoUrl,
-      );
-      if (!validation.ok) {
-        throw new Error(validation.message);
-      }
-
       setSyncStatus("writing_local_events");
       const snapshot = buildSnapshotFromSessions(
         sessions,
@@ -498,6 +498,9 @@ function App() {
         lastSyncAt: new Date().toISOString(),
         lastSyncStatus: result.message,
         lastSyncError: undefined,
+        lastSyncDurationMs: result.durationMs,
+        lastSyncGitCommandCount: result.gitCommandCount,
+        lastSyncCommandError: result.lastCommandError,
       };
       persistSyncSettings(nextSettings);
       setSyncStatus("complete");
@@ -510,6 +513,7 @@ function App() {
         ...syncSettings,
         lastSyncStatus: "Error",
         lastSyncError: message,
+        lastSyncCommandError: message,
       });
       setSyncStatus("error");
     } finally {
@@ -610,6 +614,7 @@ function App() {
           gitVersion={gitVersion}
           repoCount={repos.length}
           activeSessionCount={activeSessions.length}
+          repoDiagnostics={repoDiagnostics}
           onIdentityChange={persistIdentity}
           onSetupChange={persistSetupState}
           onSettingsChange={persistSyncSettings}
@@ -635,7 +640,7 @@ function App() {
       <OnboardingPage
         identity={setupState.identity}
         checklist={checklist}
-        busy={setupBusy}
+        busy={setupBusy || setupChecking}
         message={setupMessage}
         error={setupError}
         onIdentityChange={persistIdentity}

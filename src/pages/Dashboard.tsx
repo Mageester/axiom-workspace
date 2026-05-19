@@ -200,7 +200,7 @@ export function Dashboard({
                   ) : (
                     <RefreshCw size={14} />
                   )}
-                  Sync Now
+                  {syncing ? "Syncing..." : "Sync Now"}
                 </button>
               )}
             </div>

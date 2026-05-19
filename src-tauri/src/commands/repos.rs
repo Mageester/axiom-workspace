@@ -1,8 +1,9 @@
+use super::process;
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
-use std::process::Command;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +61,9 @@ pub struct RepoStatus {
     pub status: Status,
     pub last_checked_at: String,
     pub error_message: Option<String>,
+    pub refresh_duration_ms: u128,
+    pub git_command_count: u32,
+    pub last_command_error: Option<String>,
 }
 
 struct DirtySummary {
@@ -68,24 +72,41 @@ struct DirtySummary {
     has_more: bool,
 }
 
-fn git_command(repo_path: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["-C", repo_path])
-        .args(args)
-        .output()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "Git is not installed or not found on PATH".to_string()
-            } else {
-                format!("Failed to run git: {}", e)
-            }
-        })?;
+struct RepoCheckContext {
+    started: Instant,
+    git_command_count: u32,
+    last_command_error: Option<String>,
+}
 
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(stderr)
+impl RepoCheckContext {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            git_command_count: 0,
+            last_command_error: None,
+        }
+    }
+
+    fn duration_ms(&self) -> u128 {
+        self.started.elapsed().as_millis()
+    }
+
+    fn git_command(&mut self, repo_path: &str, args: &[&str]) -> Result<String, String> {
+        self.git_command_count += 1;
+        let mut full_args = vec!["-C", repo_path];
+        full_args.extend_from_slice(args);
+        match process::run_command("git", &full_args, None, Duration::from_secs(5)) {
+            Ok(output) => Ok(output.stdout),
+            Err(error) => {
+                let message = if matches!(error.kind, process::ProcessErrorKind::NotFound) {
+                    "Git is not installed or not found on PATH".to_string()
+                } else {
+                    error.user_message()
+                };
+                self.last_command_error = Some(message.clone());
+                Err(message)
+            }
+        }
     }
 }
 
@@ -180,7 +201,13 @@ fn repo_name_from_path(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-fn error_status(path: &str, name: String, id: String, message: &str) -> RepoStatus {
+fn error_status(
+    path: &str,
+    name: String,
+    id: String,
+    message: &str,
+    ctx: &RepoCheckContext,
+) -> RepoStatus {
     RepoStatus {
         id,
         name,
@@ -200,10 +227,22 @@ fn error_status(path: &str, name: String, id: String, message: &str) -> RepoStat
         status: Status::Error,
         last_checked_at: now_unix_secs(),
         error_message: Some(message.to_string()),
+        refresh_duration_ms: ctx.duration_ms(),
+        git_command_count: ctx.git_command_count,
+        last_command_error: ctx
+            .last_command_error
+            .clone()
+            .or_else(|| Some(message.to_string())),
     }
 }
 
-fn repo_error_status(path: &str, name: String, id: String, message: &str) -> RepoStatus {
+fn repo_error_status(
+    path: &str,
+    name: String,
+    id: String,
+    message: &str,
+    ctx: &RepoCheckContext,
+) -> RepoStatus {
     RepoStatus {
         id,
         name,
@@ -223,6 +262,12 @@ fn repo_error_status(path: &str, name: String, id: String, message: &str) -> Rep
         status: Status::Error,
         last_checked_at: now_unix_secs(),
         error_message: Some(message.to_string()),
+        refresh_duration_ms: ctx.duration_ms(),
+        git_command_count: ctx.git_command_count,
+        last_command_error: ctx
+            .last_command_error
+            .clone()
+            .or_else(|| Some(message.to_string())),
     }
 }
 
@@ -235,10 +280,11 @@ fn is_missing_upstream_error(message: &str) -> bool {
 }
 
 fn check_repo_status(path: &str) -> RepoStatus {
+    let mut ctx = RepoCheckContext::new();
     let name = repo_name_from_path(path);
     let id = id_from_path(path);
 
-    let is_git_repo = match git_command(path, &["rev-parse", "--is-inside-work-tree"]) {
+    let is_git_repo = match ctx.git_command(path, &["rev-parse", "--is-inside-work-tree"]) {
         Ok(output) => output == "true",
         Err(e) => {
             let msg = if e.contains("not found on PATH") {
@@ -248,35 +294,37 @@ fn check_repo_status(path: &str) -> RepoStatus {
             } else {
                 "Not a Git repository".to_string()
             };
-            return error_status(path, name, id, &msg);
+            return error_status(path, name, id, &msg, &ctx);
         }
     };
 
     if !is_git_repo {
-        return error_status(path, name, id, "Not a Git repository");
+        return error_status(path, name, id, "Not a Git repository", &ctx);
     }
 
     let (current_branch, is_detached_head) =
-        match git_command(path, &["rev-parse", "--abbrev-ref", "HEAD"]) {
+        match ctx.git_command(path, &["rev-parse", "--abbrev-ref", "HEAD"]) {
             Ok(branch) if branch == "HEAD" => {
-                let short_hash = git_command(path, &["rev-parse", "--short", "HEAD"])
+                let short_hash = ctx
+                    .git_command(path, &["rev-parse", "--short", "HEAD"])
                     .unwrap_or_else(|_| "Detached HEAD".to_string());
                 (short_hash, true)
             }
             Ok(branch) => (branch, false),
-            Err(e) => return repo_error_status(path, name, id, &e),
+            Err(e) => return repo_error_status(path, name, id, &e, &ctx),
         };
 
-    let dirty_summary = match git_command(path, &["status", "--porcelain=v1"]) {
+    let dirty_summary = match ctx.git_command(path, &["status", "--porcelain=v1"]) {
         Ok(output) => summarize_dirty_files(&output, 20),
-        Err(e) => return repo_error_status(path, name, id, &e),
+        Err(e) => return repo_error_status(path, name, id, &e, &ctx),
     };
     let has_uncommitted_changes = dirty_summary.count > 0;
 
-    let (ahead, behind, has_upstream, upstream_status, upstream_error_message) = match git_command(
-        path,
-        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-    ) {
+    let (ahead, behind, has_upstream, upstream_status, upstream_error_message) = match ctx
+        .git_command(
+            path,
+            &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+        ) {
         Ok(output) => {
             let parts: Vec<&str> = output.split('\t').collect();
             if parts.len() == 2 {
@@ -284,17 +332,17 @@ fn check_repo_status(path: &str) -> RepoStatus {
                     (Ok(ahead), Ok(behind)) => (ahead, behind, true, UpstreamStatus::Ok, None),
                     _ => {
                         let message = format!("Failed to parse upstream counts: {}", output);
-                        return repo_error_status(path, name, id, &message);
+                        return repo_error_status(path, name, id, &message, &ctx);
                     }
                 }
             } else {
                 let message = format!("Failed to parse upstream counts: {}", output);
-                return repo_error_status(path, name, id, &message);
+                return repo_error_status(path, name, id, &message, &ctx);
             }
         }
         Err(e) if is_missing_upstream_error(&e) => (0, 0, false, UpstreamStatus::Missing, None),
         Err(e) => {
-            let mut status = repo_error_status(path, name, id, &e);
+            let mut status = repo_error_status(path, name, id, &e, &ctx);
             status.upstream_error_message = Some(e);
             return status;
         }
@@ -321,6 +369,9 @@ fn check_repo_status(path: &str) -> RepoStatus {
         status,
         last_checked_at: now_unix_secs(),
         error_message: None,
+        refresh_duration_ms: ctx.duration_ms(),
+        git_command_count: ctx.git_command_count,
+        last_command_error: ctx.last_command_error,
     }
 }
 

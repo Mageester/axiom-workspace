@@ -1,8 +1,10 @@
+use super::process;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
@@ -10,6 +12,7 @@ const DEFAULT_SYNC_REPO_URL: &str = "https://github.com/Mageester/axiom-workspac
 const WRITE_ACCESS_ERROR: &str = "GitHub read access works, but Axiom Workspace cannot upload sync changes. Make sure this GitHub account has write access to Mageester/axiom-workspace-sync.";
 const CONCURRENT_SYNC_ERROR: &str =
     "Sync needs attention. Remote updates arrived during sync. Try Sync Now again.";
+static SYNC_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,37 +66,61 @@ pub struct SyncNowResult {
     events: Vec<Value>,
     skipped: u32,
     committed: bool,
+    duration_ms: u128,
+    git_command_count: u32,
+    last_command_error: Option<String>,
 }
 
-fn run_command(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
-    let mut command = Command::new(program);
-    command.args(args);
-    if let Some(path) = cwd {
-        command.current_dir(path);
-    }
+#[derive(Debug, Default)]
+struct GitCommandStats {
+    count: u32,
+    last_error: Option<String>,
+}
 
-    let output = command.output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            format!("{} is not installed or not found on PATH", program)
-        } else {
-            format!("Failed to run {}: {}", program, e)
+impl GitCommandStats {
+    fn run(
+        &mut self,
+        args: &[&str],
+        cwd: Option<&Path>,
+        timeout: Duration,
+    ) -> Result<String, String> {
+        self.count += 1;
+        match process::run_command("git", args, cwd, timeout) {
+            Ok(output) => Ok(output.stdout),
+            Err(error) => {
+                let message = error.user_message();
+                self.last_error = Some(message.clone());
+                Err(message)
+            }
         }
-    })?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-
-    if output.status.success() {
-        Ok(stdout)
-    } else if stderr.is_empty() {
-        Err(stdout)
-    } else {
-        Err(stderr)
     }
 }
 
-fn git_command(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
-    run_command("git", args, cwd)
+fn git_command(args: &[&str], cwd: Option<&Path>, timeout: Duration) -> Result<String, String> {
+    let mut stats = GitCommandStats::default();
+    stats.run(args, cwd, timeout)
+}
+
+struct SyncInFlightGuard;
+
+impl SyncInFlightGuard {
+    fn acquire() -> Result<Self, String> {
+        if SYNC_IN_FLIGHT
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            return Err(
+                "Sync is already running. Wait for it to finish, then try again.".to_string(),
+            );
+        }
+        Ok(Self)
+    }
+}
+
+impl Drop for SyncInFlightGuard {
+    fn drop(&mut self) {
+        SYNC_IN_FLIGHT.store(false, Ordering::Release);
+    }
 }
 
 fn app_sync_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -186,7 +213,11 @@ fn strict_validation_error(message: String) -> String {
     )
 }
 
-fn validate_repo_path(path: &str, expected_url: Option<String>) -> Result<PathBuf, String> {
+fn validate_repo_path_with_stats(
+    path: &str,
+    expected_url: Option<String>,
+    stats: &mut GitCommandStats,
+) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("Axiom Workspace needs a local sync folder before it can sync.".to_string());
@@ -200,7 +231,11 @@ fn validate_repo_path(path: &str, expected_url: Option<String>) -> Result<PathBu
         return Err("The local sync path must be a folder.".to_string());
     }
 
-    let inside = git_command(&["rev-parse", "--is-inside-work-tree"], Some(&repo_path))?;
+    let inside = stats.run(
+        &["rev-parse", "--is-inside-work-tree"],
+        Some(&repo_path),
+        Duration::from_secs(5),
+    )?;
     if inside != "true" {
         return Err(
             "A sync folder already exists but is not valid. Axiom can create a fresh sync folder safely during setup."
@@ -208,17 +243,27 @@ fn validate_repo_path(path: &str, expected_url: Option<String>) -> Result<PathBu
         );
     }
 
-    let git_dir = git_command(&["rev-parse", "--show-toplevel"], Some(&repo_path))?;
+    let git_dir = stats.run(
+        &["rev-parse", "--show-toplevel"],
+        Some(&repo_path),
+        Duration::from_secs(5),
+    )?;
     let root = PathBuf::from(git_dir);
     if root != repo_path {
         return Err("The sync folder must be the root of the Axiom sync workspace.".to_string());
     }
 
-    let remote = git_command(&["remote", "get-url", "origin"], Some(&repo_path)).map_err(|_| {
-        strict_validation_error(
-            "The sync folder is a Git repo, but it has no origin remote.".to_string(),
+    let remote = stats
+        .run(
+            &["remote", "get-url", "origin"],
+            Some(&repo_path),
+            Duration::from_secs(5),
         )
-    })?;
+        .map_err(|_| {
+            strict_validation_error(
+                "The sync folder is a Git repo, but it has no origin remote.".to_string(),
+            )
+        })?;
     let expected = normalize_repo_url(&expected_repo_url(expected_url));
     let actual = normalize_repo_url(&remote);
     if actual != expected {
@@ -228,6 +273,11 @@ fn validate_repo_path(path: &str, expected_url: Option<String>) -> Result<PathBu
     }
 
     Ok(repo_path)
+}
+
+fn validate_repo_path(path: &str, expected_url: Option<String>) -> Result<PathBuf, String> {
+    let mut stats = GitCommandStats::default();
+    validate_repo_path_with_stats(path, expected_url, &mut stats)
 }
 
 fn ensure_structure(repo_path: &Path) -> Result<(), String> {
@@ -358,7 +408,12 @@ fn snapshot_has_meaningful_change(repo_path: &Path, snapshot: &Value) -> bool {
 
 fn clone_sync_repo(sync_repo_url: &str, destination: &Path) -> Result<(), String> {
     let destination_text = destination.to_string_lossy().to_string();
-    git_command(&["clone", sync_repo_url.trim(), &destination_text], None).map_err(|e| {
+    git_command(
+        &["clone", sync_repo_url.trim(), &destination_text],
+        None,
+        Duration::from_secs(120),
+    )
+    .map_err(|e| {
         format!(
             "Axiom could not connect the team sync workspace. Check GitHub access and try again. {}",
             e
@@ -383,8 +438,12 @@ fn recovered_sync_path(sync_path: &Path) -> PathBuf {
     parent.join(format!("sync-recovered-{}", seconds))
 }
 
-fn pull_remote_updates(repo_path: &Path) -> Result<(), String> {
-    if let Err(message) = git_command(&["pull", "--ff-only"], Some(repo_path)) {
+fn pull_remote_updates(repo_path: &Path, stats: &mut GitCommandStats) -> Result<(), String> {
+    if let Err(message) = stats.run(
+        &["pull", "--ff-only"],
+        Some(repo_path),
+        Duration::from_secs(60),
+    ) {
         let lower = message.to_lowercase();
         if lower.contains("conflict") || lower.contains("merge") || lower.contains("overwritten") {
             return Err("Sync found a conflict in the team sync workspace. Contact Aidan before trying manual fixes.".to_string());
@@ -399,8 +458,17 @@ fn pull_remote_updates(repo_path: &Path) -> Result<(), String> {
 }
 
 fn stage_state(repo_path: &Path) -> Result<bool, String> {
-    git_command(&["add", "state"], Some(repo_path))?;
-    let status = git_command(&["status", "--porcelain", "state"], Some(repo_path))?;
+    let mut stats = GitCommandStats::default();
+    stage_state_with_stats(repo_path, &mut stats)
+}
+
+fn stage_state_with_stats(repo_path: &Path, stats: &mut GitCommandStats) -> Result<bool, String> {
+    stats.run(&["add", "state"], Some(repo_path), Duration::from_secs(15))?;
+    let status = stats.run(
+        &["status", "--porcelain", "state"],
+        Some(repo_path),
+        Duration::from_secs(5),
+    )?;
     Ok(!status.trim().is_empty())
 }
 
@@ -408,34 +476,73 @@ fn commit_state(repo_path: &Path, message: &str) -> Result<bool, String> {
     if !stage_state(repo_path)? {
         return Ok(false);
     }
-    git_command(&["commit", "-m", message], Some(repo_path))?;
+    git_command(
+        &["commit", "-m", message],
+        Some(repo_path),
+        Duration::from_secs(15),
+    )?;
     Ok(true)
 }
 
-fn recover_after_push_rejection(repo_path: &Path) -> Result<(), String> {
-    git_command(&["pull", "--rebase"], Some(repo_path)).map_err(|_| {
-        let _ = git_command(&["rebase", "--abort"], Some(repo_path));
-        CONCURRENT_SYNC_ERROR.to_string()
-    })?;
+fn commit_state_with_stats(
+    repo_path: &Path,
+    message: &str,
+    stats: &mut GitCommandStats,
+) -> Result<bool, String> {
+    if !stage_state_with_stats(repo_path, stats)? {
+        return Ok(false);
+    }
+    stats.run(
+        &["commit", "-m", message],
+        Some(repo_path),
+        Duration::from_secs(15),
+    )?;
+    Ok(true)
+}
+
+fn recover_after_push_rejection(
+    repo_path: &Path,
+    stats: &mut GitCommandStats,
+) -> Result<(), String> {
+    stats
+        .run(
+            &["pull", "--rebase"],
+            Some(repo_path),
+            Duration::from_secs(60),
+        )
+        .map_err(|_| {
+            let _ = stats.run(
+                &["rebase", "--abort"],
+                Some(repo_path),
+                Duration::from_secs(15),
+            );
+            CONCURRENT_SYNC_ERROR.to_string()
+        })?;
     Ok(())
 }
 
-fn push_with_single_retry(repo_path: &Path, retry_commit_message: &str) -> Result<(), String> {
-    match git_command(&["push"], Some(repo_path)) {
+fn push_with_single_retry(
+    repo_path: &Path,
+    retry_commit_message: &str,
+    stats: &mut GitCommandStats,
+) -> Result<(), String> {
+    match stats.run(&["push"], Some(repo_path), Duration::from_secs(60)) {
         Ok(_) => Ok(()),
         Err(message) if is_push_rejection(&message) => {
-            recover_after_push_rejection(repo_path)?;
-            commit_state(repo_path, retry_commit_message)?;
-            git_command(&["push"], Some(repo_path)).map_err(|retry_message| {
-                if is_push_rejection(&retry_message) {
-                    CONCURRENT_SYNC_ERROR.to_string()
-                } else {
-                    format!(
-                        "Sync could not upload changes. Check internet and GitHub login. {}",
-                        retry_message
-                    )
-                }
-            })?;
+            recover_after_push_rejection(repo_path, stats)?;
+            commit_state_with_stats(repo_path, retry_commit_message, stats)?;
+            stats
+                .run(&["push"], Some(repo_path), Duration::from_secs(60))
+                .map_err(|retry_message| {
+                    if is_push_rejection(&retry_message) {
+                        CONCURRENT_SYNC_ERROR.to_string()
+                    } else {
+                        format!(
+                            "Sync could not upload changes. Check internet and GitHub login. {}",
+                            retry_message
+                        )
+                    }
+                })?;
             Ok(())
         }
         Err(message) => Err(format!(
@@ -466,7 +573,7 @@ fn write_access_check(repo_path: &Path, device_id: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub fn check_git_installed() -> GitInstallCheck {
-    match git_command(&["--version"], None) {
+    match git_command(&["--version"], None, Duration::from_secs(5)) {
         Ok(version) => GitInstallCheck {
             installed: true,
             version: Some(version.clone()),
@@ -486,7 +593,11 @@ pub fn check_git_installed() -> GitInstallCheck {
 
 #[tauri::command]
 pub fn validate_github_access(sync_repo_url: String) -> GithubAccessValidation {
-    match git_command(&["ls-remote", sync_repo_url.trim()], None) {
+    match git_command(
+        &["ls-remote", sync_repo_url.trim()],
+        None,
+        Duration::from_secs(15),
+    ) {
         Ok(_) => GithubAccessValidation {
             ok: true,
             category: GithubAccessCategory::Ready,
@@ -579,15 +690,23 @@ pub fn validate_sync_write_access(
     };
 
     let result = ensure_structure(&repo_path)
-        .and_then(|_| pull_remote_updates(&repo_path))
+        .and_then(|_| {
+            let mut stats = GitCommandStats::default();
+            pull_remote_updates(&repo_path, &mut stats)
+        })
         .and_then(|_| write_access_check(&repo_path, &device_id))
         .and_then(|_| {
             commit_state(&repo_path, "sync: verify workspace write access")
                 .map_err(|_| WRITE_ACCESS_ERROR.to_string())
         })
         .and_then(|_| {
-            push_with_single_retry(&repo_path, "sync: verify workspace write access")
-                .map_err(|_| WRITE_ACCESS_ERROR.to_string())
+            let mut stats = GitCommandStats::default();
+            push_with_single_retry(
+                &repo_path,
+                "sync: verify workspace write access",
+                &mut stats,
+            )
+            .map_err(|_| WRITE_ACCESS_ERROR.to_string())
         });
 
     match result {
@@ -641,21 +760,25 @@ pub fn sync_now(
     events: Vec<Value>,
     snapshot: Value,
 ) -> Result<SyncNowResult, String> {
-    let repo_path = validate_repo_path(&path, Some(sync_repo_url))?;
+    let _guard = SyncInFlightGuard::acquire()?;
+    let started = SystemTime::now();
+    let mut stats = GitCommandStats::default();
+    let repo_path = validate_repo_path_with_stats(&path, Some(sync_repo_url), &mut stats)?;
     ensure_structure(&repo_path)?;
 
     for event in &events {
         write_event(&repo_path, event)?;
     }
 
-    pull_remote_updates(&repo_path)?;
+    pull_remote_updates(&repo_path, &mut stats)?;
 
     let (shared_events, skipped) = read_events(&repo_path)?;
     if snapshot_has_meaningful_change(&repo_path, &snapshot) {
         write_snapshot(&repo_path, &snapshot)?;
     }
 
-    if !commit_state(&repo_path, "sync: update workspace state")? {
+    if !commit_state_with_stats(&repo_path, "sync: update workspace state", &mut stats)? {
+        let duration_ms = started.elapsed().unwrap_or_default().as_millis();
         return Ok(SyncNowResult {
             ok: true,
             message: if skipped > 0 {
@@ -670,11 +793,15 @@ pub fn sync_now(
             events: shared_events,
             skipped,
             committed: false,
+            duration_ms,
+            git_command_count: stats.count,
+            last_command_error: stats.last_error,
         });
     }
 
-    push_with_single_retry(&repo_path, "sync: update workspace state")?;
+    push_with_single_retry(&repo_path, "sync: update workspace state", &mut stats)?;
     let (latest_events, latest_skipped) = read_events(&repo_path)?;
+    let duration_ms = started.elapsed().unwrap_or_default().as_millis();
 
     Ok(SyncNowResult {
         ok: true,
@@ -690,5 +817,8 @@ pub fn sync_now(
         events: latest_events,
         skipped: latest_skipped,
         committed: true,
+        duration_ms,
+        git_command_count: stats.count,
+        last_command_error: stats.last_error,
     })
 }

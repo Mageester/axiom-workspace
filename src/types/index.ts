@@ -34,6 +34,17 @@ export interface LiveRepo {
   status: RepoStatus;
   lastCheckedAt: string;
   errorMessage: string | null;
+  refreshDurationMs?: number;
+  gitCommandCount?: number;
+  lastCommandError?: string | null;
+}
+
+export interface RepoDiagnostics {
+  lastRefreshAt?: string;
+  lastRefreshDurationMs?: number;
+  lastRefreshRepoPath?: string;
+  gitCommandCount?: number;
+  lastCommandError?: string | null;
 }
 
 export interface RepoChangedFile {
@@ -117,6 +128,9 @@ export interface SyncSettings {
   lastSyncAt?: string;
   lastSyncStatus?: string;
   lastSyncError?: string;
+  lastSyncDurationMs?: number;
+  lastSyncGitCommandCount?: number;
+  lastSyncCommandError?: string | null;
 }
 
 export type SyncStatus =
