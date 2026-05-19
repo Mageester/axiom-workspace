@@ -22,9 +22,11 @@ const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
 interface SidebarProps {
   activeItem: NavPage;
   onNavigate: (id: NavPage) => void;
+  setupComplete?: boolean;
+  activeSessionCount?: number;
 }
 
-export function Sidebar({ activeItem, onNavigate }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, setupComplete, activeSessionCount = 0 }: SidebarProps) {
   return (
     <aside className="w-56 h-screen bg-surface-1 border-r border-border flex flex-col">
       <div className="px-5 py-5 border-b border-border">
@@ -66,11 +68,21 @@ export function Sidebar({ activeItem, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      <div className="px-5 py-4 border-t border-border">
+      <div className="px-5 py-4 border-t border-border space-y-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-status-clean" />
-          <span className="text-xs text-text-muted">All systems nominal</span>
+          <div className={`w-2 h-2 rounded-full ${setupComplete ? "bg-status-clean" : "bg-status-dirty"}`} />
+          <span className="text-xs text-text-muted">
+            {setupComplete ? "Sync connected" : "Local only"}
+          </span>
         </div>
+        {activeSessionCount > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-accent" />
+            <span className="text-xs text-text-muted">
+              {activeSessionCount} active session{activeSessionCount === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
       </div>
     </aside>
   );

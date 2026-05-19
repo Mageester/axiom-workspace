@@ -382,7 +382,14 @@ pub fn get_repo_status(path: String) -> RepoStatus {
 
 #[tauri::command]
 pub fn get_multiple_repo_statuses(paths: Vec<String>) -> Vec<RepoStatus> {
-    paths.iter().map(|p| check_repo_status(p)).collect()
+    let handles: Vec<_> = paths
+        .into_iter()
+        .map(|path| std::thread::spawn(move || check_repo_status(&path)))
+        .collect();
+    handles
+        .into_iter()
+        .filter_map(|handle| handle.join().ok())
+        .collect()
 }
 
 #[cfg(test)]

@@ -1,8 +1,25 @@
-import { AlertTriangle, Clock, GitBranch, Lock, TimerOff } from "lucide-react";
+import { AlertTriangle, Clock, GitBranch, Lock, Timer, TimerOff } from "lucide-react";
 import type { SessionOverlap, WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
 import { secondaryBtnClass } from "../lib/constants";
 import { detectSessionOverlap, type CreateSessionInput } from "../lib/sessions";
+
+function formatDuration(startedAt: string, endedAt?: string): string {
+  const start = new Date(startedAt).getTime();
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+  const diffMs = Math.max(0, end - start);
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return "< 1m";
+}
 
 interface SessionsPageProps {
   activeSessions: WorkSession[];
@@ -82,7 +99,11 @@ function ActiveSessionCard({
         </div>
         <button
           className={secondaryBtnClass}
-          onClick={() => onEndSession(session.id)}
+          onClick={() => {
+            if (window.confirm(`End session "${session.title}"? This releases all soft locks for this session.`)) {
+              onEndSession(session.id);
+            }
+          }}
         >
           <TimerOff size={14} />
           End
@@ -105,6 +126,10 @@ function ActiveSessionCard({
         <span className="inline-flex items-center gap-1.5">
           <Clock size={12} />
           Started {formatDateTime(session.startedAt)}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-accent">
+          <Timer size={12} />
+          {formatDuration(session.startedAt)}
         </span>
       </div>
 
@@ -156,6 +181,7 @@ function EndedSessionCard({ session }: { session: WorkSession }) {
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-text-muted">
         <span>Started {formatDateTime(session.startedAt)}</span>
         {session.endedAt && <span>Ended {formatDateTime(session.endedAt)}</span>}
+        <span>{formatDuration(session.startedAt, session.endedAt)}</span>
       </div>
     </article>
   );

@@ -1,4 +1,5 @@
-import { Clock, Lock } from "lucide-react";
+import { useState } from "react";
+import { Clock, Copy, Lock } from "lucide-react";
 import type { WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
 
@@ -13,6 +14,23 @@ function formatDateTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="p-0.5 rounded hover:bg-surface-3 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+      title={copied ? "Copied!" : "Copy target path"}
+      onClick={() => {
+        void navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      <Copy size={11} />
+    </button>
+  );
 }
 
 export function LocksPage({ activeSessions }: LocksPageProps) {
@@ -77,8 +95,11 @@ export function LocksPage({ activeSessions }: LocksPageProps) {
                             <Lock size={13} />
                             {target.type}
                           </span>
-                          <span className="truncate text-text-primary">
-                            {target.label ?? target.value}
+                          <span className="inline-flex items-center gap-1.5 min-w-0">
+                            <span className="truncate text-text-primary">
+                              {target.label ?? target.value}
+                            </span>
+                            <CopyButton text={target.value} />
                           </span>
                           <span className="truncate text-text-secondary">
                             {session.title}

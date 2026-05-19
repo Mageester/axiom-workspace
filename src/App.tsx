@@ -12,7 +12,8 @@ import type {
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ActivityPage } from "./pages/ActivityPage";
+import { ReposPage } from "./pages/ReposPage";
 import { useRepos } from "./hooks/useRepos";
 import { SessionsPage } from "./pages/SessionsPage";
 import { LocksPage } from "./pages/LocksPage";
@@ -51,14 +52,6 @@ import {
   validateGithubAccess,
   validateSyncWriteAccess,
 } from "./lib/sync";
-
-const PAGE_TITLES: Record<Exclude<NavPage, "dashboard">, string> = {
-  repos: "Repos",
-  sessions: "Sessions",
-  locks: "Locks",
-  activity: "Activity",
-  settings: "Settings",
-};
 
 const APP_VERSION = "0.1.0";
 
@@ -602,6 +595,32 @@ function App() {
     if (activeNav === "locks") {
       return <LocksPage activeSessions={activeSessions} />;
     }
+    if (activeNav === "repos") {
+      return (
+        <ReposPage
+          repos={repos}
+          activeSessions={activeSessions}
+          loading={loading}
+          refreshingPaths={refreshingPaths}
+          onRefreshAll={refreshAll}
+          onRefreshRepo={refreshRepo}
+          onAddRepo={addRepo}
+          onRemoveRepo={removeRepo}
+          onStartSession={startSession}
+          getRepoSessions={getRepoSessions}
+          defaultUserName={setupState.identity.userName}
+        />
+      );
+    }
+    if (activeNav === "activity") {
+      return (
+        <ActivityPage
+          events={events}
+          syncSettings={syncSettings}
+          repoDiagnostics={repoDiagnostics}
+        />
+      );
+    }
     if (activeNav === "settings") {
       return (
         <SettingsPage
@@ -627,12 +646,7 @@ function App() {
         />
       );
     }
-    return (
-      <PlaceholderPage
-        title={PAGE_TITLES[activeNav]}
-        description={`${PAGE_TITLES[activeNav]} will show shared coordination activity as sync grows.`}
-      />
-    );
+    return null;
   }
 
   if (!setupState.setupComplete) {
@@ -652,7 +666,12 @@ function App() {
 
   return (
     <div className="flex h-screen bg-surface-0">
-      <Sidebar activeItem={activeNav} onNavigate={setActiveNav} />
+      <Sidebar
+        activeItem={activeNav}
+        onNavigate={setActiveNav}
+        setupComplete={setupState.setupComplete}
+        activeSessionCount={activeSessions.length}
+      />
       {renderPage()}
     </div>
   );

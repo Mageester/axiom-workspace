@@ -541,10 +541,20 @@ export function SettingsPage({
                   Reset
                 </h4>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
-                  Uninstalling the app may keep local setup data. Use this reset
+                  Uninstalling the app may keep local setup data. Use these controls
                   when testing a fresh install. These actions do not delete
                   project repos, source code, or the sync repo folder.
                 </p>
+                <div className="mt-3 rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted mb-1.5">
+                    To fully reset local app data on Windows
+                  </p>
+                  <p className="text-xs text-text-secondary leading-5">
+                    Delete these folders after uninstalling:
+                  </p>
+                  <code className="mt-1 block text-xs text-text-muted font-mono">%LOCALAPPDATA%\Axiom Workspace</code>
+                  <code className="mt-0.5 block text-xs text-text-muted font-mono">%APPDATA%\Axiom Workspace</code>
+                </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
                   <button

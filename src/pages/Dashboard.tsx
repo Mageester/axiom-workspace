@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AlertTriangle, Clock, Plus, RefreshCw, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, Plus, RefreshCw, Loader2, Timer } from "lucide-react";
 import type {
   LiveRepo,
   RepoStatus,
@@ -47,26 +47,18 @@ function formatDateTime(value?: string): string {
   }).format(new Date(value));
 }
 
-function syncStatusLabel(status: SyncStatus): string {
+function syncStatusLabel(status: SyncStatus, setupComplete: boolean): string {
+  if (!setupComplete) return "Local only";
   switch (status) {
-    case "checking":
-      return "Checking";
-    case "writing_local_events":
-      return "Writing local events";
-    case "pulling_updates":
-      return "Pulling updates";
-    case "reading_shared_events":
-      return "Reading shared events";
-    case "merging":
-      return "Merging";
-    case "pushing":
-      return "Pushing";
-    case "complete":
-      return "Complete";
-    case "error":
-      return "Needs attention";
-    default:
-      return "Idle";
+    case "checking": return "Checking...";
+    case "writing_local_events": return "Writing events...";
+    case "pulling_updates": return "Pulling updates...";
+    case "reading_shared_events": return "Reading events...";
+    case "merging": return "Merging...";
+    case "pushing": return "Pushing...";
+    case "complete": return "Connected";
+    case "error": return "Needs attention";
+    default: return "Connected";
   }
 }
 
@@ -177,7 +169,7 @@ export function Dashboard({
                   Status
                 </p>
                 <p className="mt-1 text-sm text-text-primary">
-                  {syncStatusLabel(syncStatus)}
+                  {syncStatusLabel(syncStatus, setupState.setupComplete)}
                 </p>
               </div>
               <div className="rounded-md border border-border bg-surface-0 px-3 py-2">
@@ -214,6 +206,41 @@ export function Dashboard({
           <StatCard label="Active Sessions" value={activeSessions.length} />
         </div>
 
+        {activeSessions.length > 0 && (
+          <section className="mb-6 rounded-lg border border-accent/30 bg-accent/5 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Timer size={16} className="text-accent" />
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-accent">
+                Currently Working
+              </h3>
+              <span className="rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                {activeSessions.length} active
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {activeSessions.slice(0, 6).map((session) => (
+                <div key={session.id} className="flex items-start gap-3 rounded-md border border-border bg-surface-1 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text-primary">{session.title}</p>
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      {session.userName} in {session.repoName}
+                    </p>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1 text-xs text-text-muted">
+                    <Clock size={11} />
+                    {(() => {
+                      const minutes = Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 60000);
+                      if (minutes < 1) return "< 1m";
+                      if (minutes < 60) return `${minutes}m`;
+                      return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+                    })()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-4">
             <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
@@ -238,8 +265,11 @@ export function Dashboard({
             </div>
           ) : repos.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 rounded-lg border border-dashed border-border">
-              <p className="text-sm text-text-muted mb-3">
-                No repositories added yet
+              <p className="text-sm text-text-muted mb-2">
+                No repositories tracked yet.
+              </p>
+              <p className="text-xs text-text-muted mb-4 max-w-md text-center">
+                Add repos like Axiom Site or Pipeline Engine. Axiom reads their status but never writes to them.
               </p>
               <button
                 className={primaryBtnClass}

@@ -3,14 +3,17 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Copy,
   FileText,
+  FolderOpen,
   GitBranch,
   Loader2,
   Play,
   RefreshCw,
   Timer,
-  X,
+  Trash2,
 } from "lucide-react";
+import { revealItemInDir, openPath } from "@tauri-apps/plugin-opener";
 import type { LiveRepo, RepoChangeKind, WorkSession } from "../types";
 import { StatusBadge } from "./StatusBadge";
 import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
@@ -50,6 +53,26 @@ function formatLastChecked(value: string): string {
   }).format(date);
 }
 
+async function openFolder(path: string) {
+  try {
+    await revealItemInDir(path);
+  } catch {
+    try {
+      await openPath(path);
+    } catch {
+      // Silently fail if opener is unavailable
+    }
+  }
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard API not available in some contexts
+  }
+}
+
 export function RepoCard({
   repo,
   refreshing,
@@ -60,6 +83,7 @@ export function RepoCard({
 }: RepoCardProps) {
   const hasActiveSessions = activeSessions.length > 0;
   const [detailsOpen, setDetailsOpen] = useState(repo.status === "dirty");
+  const [copied, setCopied] = useState(false);
   const hasDirtyFiles = repo.status === "dirty" && repo.changedFileCount > 0;
   const hasDetails =
     hasDirtyFiles ||
@@ -102,10 +126,30 @@ export function RepoCard({
           <h3 className="truncate text-sm font-medium text-text-primary">
             {repo.name}
           </h3>
-          <p className="mt-1 truncate text-xs text-text-muted">{repo.path}</p>
+          <div className="mt-1 flex items-center gap-1.5 min-w-0">
+            <p className="truncate text-xs text-text-muted">{repo.path}</p>
+            <button
+              className={`${iconBtnClass} shrink-0`}
+              title={copied ? "Copied!" : "Copy path"}
+              onClick={() => {
+                void copyToClipboard(repo.path);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              <Copy size={10} />
+            </button>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <StatusBadge status={repo.status} />
+          <button
+            onClick={() => void openFolder(repo.path)}
+            className={iconBtnClass}
+            title="Open folder"
+          >
+            <FolderOpen size={12} />
+          </button>
           <button
             onClick={onRefresh}
             disabled={refreshing}
@@ -119,11 +163,15 @@ export function RepoCard({
             )}
           </button>
           <button
-            onClick={onRemove}
+            onClick={() => {
+              if (window.confirm(`Remove ${repo.name} from Axiom? This does not delete the repo folder.`)) {
+                onRemove();
+              }
+            }}
             className={`${iconBtnClass} hover:!text-status-locked`}
             title="Remove repo from Axiom"
           >
-            <X size={12} />
+            <Trash2 size={12} />
           </button>
         </div>
       </div>
