@@ -11,7 +11,6 @@ export type NavPage =
   | "dashboard"
   | "repos"
   | "sessions"
-  | "locks"
   | "activity"
   | "settings";
 

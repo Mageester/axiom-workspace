@@ -327,8 +327,8 @@ export function createDefaultSyncSettings(
   return {
     syncRepoUrl: setupState.syncRepoUrl || DEFAULT_SYNC_REPO_URL,
     syncLocalPath: setupState.syncLocalPath,
-    autoSyncEnabled: false,
-    syncIntervalSeconds: 300,
+    autoSyncEnabled: true,
+    syncIntervalSeconds: 180,
     autoRefreshReposEnabled: true,
     repoRefreshIntervalSeconds: 120,
     repoDiscoveryPaths: DEFAULT_DISCOVERY_PATHS,
@@ -352,12 +352,12 @@ export function loadSyncSettings(): SyncSettings {
           typeof parsed.syncLocalPath === "string"
             ? parsed.syncLocalPath
             : setupState.syncLocalPath,
-        autoSyncEnabled: parsed.autoSyncEnabled === true,
+        autoSyncEnabled: parsed.autoSyncEnabled !== false,
         syncIntervalSeconds:
           typeof parsed.syncIntervalSeconds === "number" &&
           parsed.syncIntervalSeconds >= 60
             ? parsed.syncIntervalSeconds
-            : 300,
+            : 180,
         autoRefreshReposEnabled: parsed.autoRefreshReposEnabled !== false,
         repoRefreshIntervalSeconds:
           typeof parsed.repoRefreshIntervalSeconds === "number" &&

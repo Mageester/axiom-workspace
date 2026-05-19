@@ -17,7 +17,6 @@ import { ActivityPage } from "./pages/ActivityPage";
 import { ReposPage } from "./pages/ReposPage";
 import { useRepos } from "./hooks/useRepos";
 import { SessionsPage } from "./pages/SessionsPage";
-import { LocksPage } from "./pages/LocksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import {
@@ -56,7 +55,8 @@ import {
   validateSyncWriteAccess,
 } from "./lib/sync";
 
-const APP_VERSION = "0.3.0";
+const APP_VERSION = "0.4.0";
+const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -195,6 +195,63 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!setupState.setupComplete || !syncSettings.autoSyncEnabled) {
+      return;
+    }
+    if (!syncSettings.lastSyncAt) {
+      void handleSyncNow(true);
+      return;
+    }
+    const lastMs = new Date(syncSettings.lastSyncAt).getTime();
+    if (!Number.isFinite(lastMs) || Date.now() - lastMs > FOCUS_AUTO_SYNC_MS) {
+      void handleSyncNow(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupState.setupComplete]);
+
+  useEffect(() => {
+    if (!setupState.setupComplete || !syncSettings.autoSyncEnabled) {
+      return;
+    }
+    function onFocus() {
+      const last = syncSettingsRef.current.lastSyncAt;
+      const lastMs = last ? new Date(last).getTime() : 0;
+      if (
+        !syncInFlightRef.current &&
+        (!Number.isFinite(lastMs) || Date.now() - lastMs > FOCUS_AUTO_SYNC_MS)
+      ) {
+        void handleSyncNow(true);
+      }
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupState.setupComplete, syncSettings.autoSyncEnabled]);
+
+  useEffect(() => {
+    if (!setupState.setupComplete || !syncSettings.autoSyncEnabled) {
+      return;
+    }
+    const intervalMs = Math.max(60, syncSettings.syncIntervalSeconds || 180) * 1000;
+    const timer = window.setInterval(() => {
+      const last = syncSettingsRef.current.lastSyncAt;
+      const lastMs = last ? new Date(last).getTime() : 0;
+      if (
+        !syncInFlightRef.current &&
+        (!Number.isFinite(lastMs) || Date.now() - lastMs >= intervalMs)
+      ) {
+        void handleSyncNow(true);
+      }
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    setupState.setupComplete,
+    syncSettings.autoSyncEnabled,
+    syncSettings.syncIntervalSeconds,
+  ]);
 
   function updateChecklistItem(
     key: SetupChecklistItem["key"],
@@ -702,6 +759,7 @@ function App() {
           repos={repos}
           repoNicknames={repoNicknames}
           activeSessions={activeSessions}
+          recentEvents={events}
           loading={loading}
           refreshingPaths={refreshingPaths}
           onRefreshAll={handleRefreshAll}
@@ -710,6 +768,7 @@ function App() {
           onRemoveRepo={removeRepo}
           onRenameRepo={handleRenameRepo}
           onStartSession={startSession}
+          onFinishSession={finishSession}
           getRepoSessions={getRepoSessions}
           defaultUserName={setupState.identity.userName}
           setupState={setupState}
@@ -729,9 +788,6 @@ function App() {
           onUpdateNotes={handleUpdateSessionNotes}
         />
       );
-    }
-    if (activeNav === "locks") {
-      return <LocksPage activeSessions={activeSessions} />;
     }
     if (activeNav === "repos") {
       return (

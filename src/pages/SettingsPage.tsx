@@ -150,7 +150,7 @@ export function SettingsPage({
     { label: "Sync repo path", value: settings.syncLocalPath || "Not connected" },
     { label: "Git version", value: gitVersion || "Not checked yet" },
     { label: "Repos tracked", value: String(repoCount) },
-    { label: "Active sessions", value: String(activeSessionCount) },
+    { label: "Active work", value: String(activeSessionCount) },
     { label: "Last sync", value: formatDateTime(settings.lastSyncAt) },
     { label: "Last sync duration", value: formatDuration(settings.lastSyncDurationMs) },
     {
@@ -229,7 +229,7 @@ export function SettingsPage({
               Identity
             </h3>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              This is how your sessions and locks appear to the team.
+              This is how your work and claimed areas appear to the team.
             </p>
           </div>
 
@@ -295,7 +295,7 @@ export function SettingsPage({
                 Team Sync
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
-                This syncs sessions, locks, and notes only. Your source code
+                This syncs work, claimed areas, and notes only. Your source code
                 stays in your normal project repos. Axiom Workspace uses GitHub
                 so team sync stays free.
               </p>
@@ -444,10 +444,10 @@ export function SettingsPage({
             <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3">
               <div>
                 <p className="text-sm font-medium text-text-primary">
-                  Auto-sync after session changes
+                  Auto-sync after work changes
                 </p>
                 <p className="text-xs text-text-muted">
-                  Debounces session starts, endings, and note edits by five seconds.
+                  Syncs after Start Work, Finish Work, note edits, app focus, and every few minutes.
                 </p>
               </div>
               <input
@@ -669,13 +669,13 @@ export function SettingsPage({
                     className={secondaryBtnClass}
                     onClick={() =>
                       confirmReset(
-                        "Reset sessions and locks? This clears local sessions, locks, and local sync events. It will not remove repo paths or setup.",
+                        "Reset work and claimed areas? This clears local work, claimed areas, and local sync events. It will not remove repo paths or setup.",
                         onResetSessionsAndLocks,
                       )
                     }
                   >
                     <RotateCcw size={14} />
-                    Reset sessions and locks
+                    Reset work and claimed areas
                   </button>
                   <button
                     className={secondaryBtnClass}

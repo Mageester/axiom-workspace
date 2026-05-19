@@ -11,7 +11,7 @@ const REPO_TYPES: WorkspaceEventType[] = ["repo_refreshed"];
 
 const FILTER_LABELS: Record<ActivityFilter, string> = {
   all: "All",
-  sessions: "Sessions",
+  sessions: "Work",
   sync: "Sync",
   repos: "Repos",
   errors: "Errors",
@@ -40,11 +40,11 @@ function formatDuration(value?: number): string {
 
 function eventLabel(type: string): string {
   switch (type) {
-    case "session_created": return "Session started";
-    case "session_ended": return "Session ended";
-    case "session_updated": return "Session updated";
+    case "session_created": return "Work started";
+    case "session_ended": return "Work finished";
+    case "session_updated": return "Note edited";
     case "note_added": return "Note added";
-    case "snapshot_created": return "Snapshot created";
+    case "snapshot_created": return "Snapshot saved";
     case "sync_completed": return "Sync completed";
     case "repo_refreshed": return "Repo refreshed";
     default: return type;
@@ -227,7 +227,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
             <div className="rounded-lg border border-dashed border-border p-10 text-center">
               <p className="text-sm text-text-muted">
                 {filter === "all"
-                  ? "No events yet. Start a session or run Sync Now to create the first event."
+                  ? "No events yet. Start work or run Sync Now to create the first event."
                   : `No ${FILTER_LABELS[filter].toLowerCase()} events found.`}
               </p>
             </div>

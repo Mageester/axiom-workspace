@@ -1,8 +1,7 @@
 import {
-  LayoutDashboard,
+  Home,
   GitFork,
-  Timer,
-  Lock,
+  Briefcase,
   Activity,
   Settings,
 } from "lucide-react";
@@ -11,10 +10,9 @@ import type { NavPage } from "../types";
 import axiomMark from "../../app-icon.png";
 
 const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
-  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+  { id: "dashboard", label: "Home", icon: <Home size={18} /> },
+  { id: "sessions", label: "Work", icon: <Briefcase size={18} /> },
   { id: "repos", label: "Repos", icon: <GitFork size={18} /> },
-  { id: "sessions", label: "Sessions", icon: <Timer size={18} /> },
-  { id: "locks", label: "Locks", icon: <Lock size={18} /> },
   { id: "activity", label: "Activity", icon: <Activity size={18} /> },
   { id: "settings", label: "Settings", icon: <Settings size={18} /> },
 ];
@@ -43,7 +41,7 @@ export function Sidebar({ activeItem, onNavigate, setupComplete, activeSessionCo
             <h1 className="text-sm font-semibold tracking-wide text-text-primary">
               Axiom Workspace
             </h1>
-            <p className="text-xs text-text-muted mt-0.5">Internal operations</p>
+            <p className="text-xs text-text-muted mt-0.5">Team coordination</p>
           </div>
         </div>
       </div>
@@ -79,7 +77,7 @@ export function Sidebar({ activeItem, onNavigate, setupComplete, activeSessionCo
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-accent" />
             <span className="text-xs text-text-muted">
-              {activeSessionCount} active session{activeSessionCount === 1 ? "" : "s"}
+              {activeSessionCount} active work item{activeSessionCount === 1 ? "" : "s"}
             </span>
           </div>
         )}

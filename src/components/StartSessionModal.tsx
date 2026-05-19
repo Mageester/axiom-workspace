@@ -213,7 +213,7 @@ export function StartSessionModal({
               Start Work
             </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Axiom prefills repo, branch, user, and a likely target from local changes.
+              Claim an area so the team knows what is in motion.
             </p>
           </div>
           <button className={iconBtnClass} onClick={onClose} title="Close">
@@ -264,7 +264,7 @@ export function StartSessionModal({
                 className={fieldClass}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Sidebar polish"
+                placeholder="Homepage hero, Pipeline auth, Contact form"
               />
               {errors.title && (
                 <p className="mt-1 text-xs text-status-locked">{errors.title}</p>
@@ -273,7 +273,7 @@ export function StartSessionModal({
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-                Suggested target
+                Area or file
               </span>
               <input
                 className={fieldClass}
@@ -293,13 +293,13 @@ export function StartSessionModal({
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-              Notes
+              Optional note
             </span>
             <textarea
               className={`${fieldClass} min-h-20 resize-none`}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Optional coordination notes"
+              placeholder="Anything the team should know?"
             />
           </label>
 
@@ -310,10 +310,10 @@ export function StartSessionModal({
             >
               <div>
                 <p className="text-sm font-medium text-text-primary">
-                  Advanced fields
+                  Advanced
                 </p>
                 <p className="mt-0.5 text-xs text-text-muted">
-                  Edit user, branch, target type, or add extra targets.
+                  Change user, branch, area type, or add more areas.
                 </p>
               </div>
               {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}

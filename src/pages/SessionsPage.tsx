@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { AlertTriangle, Check, Clock, GitBranch, Lock, Pencil, Timer, TimerOff, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  GitBranch,
+  Lock,
+  Pencil,
+  Timer,
+  TimerOff,
+  X,
+} from "lucide-react";
 import type { SessionOverlap, WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
 import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
@@ -59,7 +69,7 @@ function getSessionOverlaps(
   );
 }
 
-function TargetList({ session }: { session: WorkSession }) {
+function AreaList({ session }: { session: WorkSession }) {
   return (
     <div className="flex flex-wrap gap-2">
       {session.targets.map((target) => (
@@ -78,7 +88,7 @@ function TargetList({ session }: { session: WorkSession }) {
   );
 }
 
-function ActiveSessionCard({
+function ActiveWorkCard({
   session,
   overlaps,
   onEndSession,
@@ -89,10 +99,21 @@ function ActiveSessionCard({
   onEndSession: (sessionId: string, endNote?: string) => void;
   onUpdateNotes: (sessionId: string, notes: string) => void;
 }) {
-  const [ending, setEnding] = useState(false);
-  const [endNote, setEndNote] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const [changedNote, setChangedNote] = useState("");
+  const [handoffNote, setHandoffNote] = useState("");
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(session.notes ?? "");
+
+  function confirmFinish() {
+    const parts: string[] = [];
+    if (changedNote.trim()) parts.push(`Changed: ${changedNote.trim()}`);
+    if (handoffNote.trim()) parts.push(`Handoff: ${handoffNote.trim()}`);
+    onEndSession(session.id, parts.join("\n") || undefined);
+    setFinishing(false);
+    setChangedNote("");
+    setHandoffNote("");
+  }
 
   return (
     <article className="rounded-lg border border-border bg-surface-1 p-5">
@@ -106,42 +127,60 @@ function ActiveSessionCard({
           </h3>
           <p className="mt-1 text-sm text-text-secondary">{session.userName}</p>
         </div>
-        {!ending && (
+        {!finishing && (
           <button
             className={secondaryBtnClass}
-            onClick={() => setEnding(true)}
+            onClick={() => setFinishing(true)}
           >
             <TimerOff size={14} />
-            End
+            Finish Work
           </button>
         )}
       </div>
 
-      {ending && (
-        <div className="mt-4 rounded-md border border-status-dirty/30 bg-status-dirty/10 p-3 space-y-2">
-          <p className="text-sm font-medium text-status-dirty">
-            End session &ldquo;{session.title}&rdquo;? This releases all soft locks.
+      {finishing && (
+        <div className="mt-4 rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
+          <p className="text-sm font-medium text-text-primary">
+            Finish &ldquo;{session.title}&rdquo;? This releases claimed areas and syncs.
           </p>
-          <textarea
-            className="w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
-            rows={2}
-            placeholder="Handoff note (optional) — where you left off, what's next"
-            value={endNote}
-            onChange={(e) => setEndNote(e.target.value)}
-          />
+          <label className="block">
+            <span className="block text-xs font-medium uppercase tracking-wide text-text-muted">
+              What changed?
+            </span>
+            <textarea
+              className="mt-1 w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+              rows={2}
+              placeholder="Optional — summary of what you did"
+              value={changedNote}
+              onChange={(e) => setChangedNote(e.target.value)}
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Anything the team should know?
+            </span>
+            <textarea
+              className="mt-1 w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+              rows={2}
+              placeholder="Optional handoff note"
+              value={handoffNote}
+              onChange={(e) => setHandoffNote(e.target.value)}
+            />
+          </label>
           <div className="flex items-center gap-2">
             <button
-              className={`${secondaryBtnClass} !bg-status-locked/10 !text-status-locked !border-status-locked/30 hover:!bg-status-locked/20`}
-              onClick={() => {
-                onEndSession(session.id, endNote);
-                setEnding(false);
-              }}
+              className={`${secondaryBtnClass} !bg-accent/10 !text-accent !border-accent/30 hover:!bg-accent/20`}
+              onClick={confirmFinish}
             >
-              Confirm End
+              Finish and Sync
             </button>
             <button
               className={secondaryBtnClass}
-              onClick={() => { setEnding(false); setEndNote(""); }}
+              onClick={() => {
+                setFinishing(false);
+                setChangedNote("");
+                setHandoffNote("");
+              }}
             >
               Cancel
             </button>
@@ -155,7 +194,7 @@ function ActiveSessionCard({
             <textarea
               className="w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
               rows={3}
-              placeholder="Session notes..."
+              placeholder="Notes..."
               value={notesValue}
               onChange={(e) => setNotesValue(e.target.value)}
             />
@@ -217,7 +256,7 @@ function ActiveSessionCard({
       </div>
 
       <div className="mt-4">
-        <TargetList session={session} />
+        <AreaList session={session} />
       </div>
 
       {overlaps.length > 0 && (
@@ -239,7 +278,7 @@ function ActiveSessionCard({
   );
 }
 
-function EndedSessionCard({ session }: { session: WorkSession }) {
+function FinishedWorkCard({ session }: { session: WorkSession }) {
   return (
     <article className="rounded-lg border border-border bg-surface-1/70 p-5">
       <div className="flex items-start justify-between gap-4">
@@ -253,27 +292,94 @@ function EndedSessionCard({ session }: { session: WorkSession }) {
           <p className="mt-1 text-sm text-text-secondary">{session.userName}</p>
         </div>
         <span className="rounded-md border border-border px-2 py-1 text-xs text-text-muted">
-          Ended
+          Finished
         </span>
       </div>
 
       {session.endNote && (
         <div className="mt-3 rounded border border-accent/20 bg-accent/5 px-3 py-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-accent mb-1">Handoff Note</p>
-          <p className="text-sm leading-6 text-text-secondary">{session.endNote}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-accent mb-1">Handoff</p>
+          <p className="whitespace-pre-line text-sm leading-6 text-text-secondary">{session.endNote}</p>
         </div>
       )}
 
       <div className="mt-4">
-        <TargetList session={session} />
+        <AreaList session={session} />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-text-muted">
         <span>Started {formatDateTime(session.startedAt)}</span>
-        {session.endedAt && <span>Ended {formatDateTime(session.endedAt)}</span>}
+        {session.endedAt && <span>Finished {formatDateTime(session.endedAt)}</span>}
         <span>{formatDuration(session.startedAt, session.endedAt)}</span>
       </div>
     </article>
+  );
+}
+
+function ClaimedAreasSection({ activeSessions }: { activeSessions: WorkSession[] }) {
+  const sessionsByRepo = activeSessions.reduce<Record<string, WorkSession[]>>(
+    (acc, session) => {
+      acc[session.repoId] = [...(acc[session.repoId] ?? []), session];
+      return acc;
+    },
+    {},
+  );
+  const grouped = Object.values(sessionsByRepo);
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
+          Claimed Areas
+        </h3>
+        <span className="text-sm text-text-muted">
+          {activeSessions.reduce((sum, s) => sum + s.targets.length, 0)} total
+        </span>
+      </div>
+
+      {grouped.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+          <p className="text-sm text-text-muted">
+            No claimed areas. Areas show up here while work is active.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map((sessions) => {
+            const repoName = sessions[0]?.repoName ?? "Unknown repo";
+            return (
+              <div key={sessions[0]?.repoId ?? repoName} className="overflow-hidden rounded-lg border border-border bg-surface-1">
+                <div className="border-b border-border bg-surface-2 px-4 py-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  {repoName}
+                </div>
+                {sessions.flatMap((session) =>
+                  session.targets.map((target) => (
+                    <div
+                      key={`${session.id}-${target.id}`}
+                      className="grid grid-cols-[100px_1fr_1fr_140px] gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0"
+                    >
+                      <span className="inline-flex items-center gap-2 text-text-secondary">
+                        <Lock size={12} />
+                        {target.type}
+                      </span>
+                      <span className="truncate text-text-primary">
+                        {target.label ?? target.value}
+                      </span>
+                      <span className="truncate text-text-secondary">
+                        {session.title}
+                      </span>
+                      <span className="truncate text-text-muted">
+                        {session.userName}
+                      </span>
+                    </div>
+                  )),
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -286,15 +392,15 @@ export function SessionsPage({
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
-        title="Sessions"
-        description="Active local coordination and recent completed work."
+        title="Work"
+        description="Active work, claimed areas, and recent finished work."
       />
 
       <main className="space-y-8 p-8">
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
-              Active Sessions
+              Active Work
             </h3>
             <span className="text-sm text-text-muted">
               {activeSessions.length} active
@@ -304,13 +410,13 @@ export function SessionsPage({
           {activeSessions.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-10 text-center">
               <p className="text-sm text-text-muted">
-                No active sessions. Start one from the Dashboard.
+                No active work. Start work from Home.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {activeSessions.map((session) => (
-                <ActiveSessionCard
+                <ActiveWorkCard
                   key={session.id}
                   session={session}
                   overlaps={getSessionOverlaps(session, activeSessions)}
@@ -322,10 +428,12 @@ export function SessionsPage({
           )}
         </section>
 
+        <ClaimedAreasSection activeSessions={activeSessions} />
+
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
-              Recent Ended Sessions
+              Recent Finished Work
             </h3>
             <span className="text-sm text-text-muted">
               {recentEndedSessions.length} shown
@@ -335,13 +443,13 @@ export function SessionsPage({
           {recentEndedSessions.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-10 text-center">
               <p className="text-sm text-text-muted">
-                Ended sessions will appear here.
+                Finished work shows up here.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {recentEndedSessions.map((session) => (
-                <EndedSessionCard key={session.id} session={session} />
+                <FinishedWorkCard key={session.id} session={session} />
               ))}
             </div>
           )}
