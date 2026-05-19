@@ -13,6 +13,7 @@ const SETUP_KEY = "axiom-workspace:setup-state";
 const IDENTITY_KEY = "axiom-workspace:device-identity";
 const SETTINGS_KEY = "axiom-workspace:sync-settings";
 const EVENTS_KEY = "axiom-workspace:events";
+const REPO_PATHS_KEY = "axiom-repo-paths";
 
 export const DEFAULT_SYNC_REPO_URL =
   "https://github.com/Mageester/axiom-workspace-sync";
@@ -247,7 +248,7 @@ export function saveSetupState(state: SetupState): void {
 }
 
 export function resetSetupState(): SetupState {
-  const identity = loadDeviceIdentity();
+  const identity = createDefaultIdentity();
   const reset: SetupState = {
     setupComplete: false,
     identity,
@@ -258,6 +259,46 @@ export function resetSetupState(): SetupState {
   saveSetupState(reset);
   saveSyncSettings(createDefaultSyncSettings(reset));
   return reset;
+}
+
+export function resetSyncState(): {
+  setupState: SetupState;
+  syncSettings: SyncSettings;
+} {
+  const identity = loadDeviceIdentity();
+  const setupState: SetupState = {
+    setupComplete: false,
+    identity,
+    syncRepoUrl: DEFAULT_SYNC_REPO_URL,
+    syncLocalPath: "",
+    lastSetupCheckAt: null,
+    lastError:
+      "Sync settings were reset. Reconnect to the team sync workspace when ready.",
+  };
+  const syncSettings = createDefaultSyncSettings(setupState);
+  saveSetupState(setupState);
+  saveSyncSettings(syncSettings);
+  saveEvents([]);
+  return { setupState, syncSettings };
+}
+
+export function clearAxiomLocalStorage(): void {
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key && (key.startsWith("axiom-workspace:") || key === REPO_PATHS_KEY)) {
+        keys.push(key);
+      }
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    localStorage.removeItem(SETUP_KEY);
+    localStorage.removeItem(IDENTITY_KEY);
+    localStorage.removeItem(SETTINGS_KEY);
+    localStorage.removeItem(EVENTS_KEY);
+    localStorage.removeItem(REPO_PATHS_KEY);
+  }
 }
 
 export function createDefaultSyncSettings(

@@ -31,6 +31,7 @@ import {
   applyWorkspaceEvents,
   buildSnapshotFromSessions,
   checkGitInstalled,
+  clearAxiomLocalStorage,
   createDefaultSyncSettings,
   createWorkspaceEvent,
   dedupeEvents,
@@ -40,6 +41,7 @@ import {
   loadSetupState,
   loadSyncSettings,
   resetSetupState,
+  resetSyncState,
   saveDeviceIdentity,
   saveEvents,
   saveSetupState,
@@ -514,6 +516,38 @@ function App() {
     setSyncStatus("idle");
   }
 
+  function handleResetSessionsAndLocks() {
+    setSessions([]);
+    setEvents([]);
+    saveSessions([]);
+    saveEvents([]);
+    setSyncStatus("idle");
+    persistSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "Local sessions and locks were reset.",
+      lastSyncError: undefined,
+    });
+  }
+
+  function handleResetSyncState() {
+    const reset = resetSyncState();
+    setSetupState(reset.setupState);
+    setSyncSettings(reset.syncSettings);
+    setEvents([]);
+    setChecklist(createChecklist(reset.setupState));
+    setActiveNav("dashboard");
+    setSetupMessage("");
+    setSetupError("");
+    setSyncStatus("idle");
+  }
+
+  function handleFullLocalReset() {
+    clearAxiomLocalStorage();
+    setSessions([]);
+    setEvents([]);
+    window.location.reload();
+  }
+
   function getRepoSessions(repo: LiveRepo): WorkSession[] {
     return activeSessions.filter((session) => session.repoId === repo.id);
   }
@@ -566,6 +600,9 @@ function App() {
           onValidateSetup={() => runSetupCheck(true)}
           onSyncNow={handleSyncNow}
           onResetSetup={handleResetSetup}
+          onResetSessionsAndLocks={handleResetSessionsAndLocks}
+          onResetSyncState={handleResetSyncState}
+          onFullLocalReset={handleFullLocalReset}
         />
       );
     }

@@ -21,6 +21,17 @@ On first run, the app checks setup health, asks for a user display name and devi
 4. If Git is missing, click **Install Git**, install Git for Windows, then click **Re-check Git**.
 5. Once connected, use **Sync Now** to share sessions and locks.
 
+## How to fully reset local app data on Windows
+
+Uninstalling Axiom Workspace may keep local setup data, sync settings, sessions, locks, and cached app state. When testing a fresh installer, open **Settings → Advanced Sync Settings → Reset** and use **Full reset local app data**. This clears Axiom Workspace local browser storage and reloads the app. It does not delete project repos, source code, or the sync repo folder.
+
+For a manual reset, close Axiom Workspace and remove these app data folders if they exist:
+
+- `%LOCALAPPDATA%\Axiom Workspace`
+- `%APPDATA%\Axiom Workspace`
+
+Do not delete project repository folders when resetting local app data.
+
 ## Development
 
 ```bash

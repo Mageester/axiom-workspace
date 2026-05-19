@@ -32,6 +32,9 @@ interface SettingsPageProps {
   onValidateSetup: () => Promise<void>;
   onSyncNow: () => Promise<void>;
   onResetSetup: () => void;
+  onResetSessionsAndLocks: () => void;
+  onResetSyncState: () => void;
+  onFullLocalReset: () => void;
 }
 
 const fieldClass =
@@ -102,6 +105,9 @@ export function SettingsPage({
   onValidateSetup,
   onSyncNow,
   onResetSetup,
+  onResetSessionsAndLocks,
+  onResetSyncState,
+  onFullLocalReset,
 }: SettingsPageProps) {
   const [identityDraft, setIdentityDraft] = useState(setupState.identity);
   const [repoUrlDraft, setRepoUrlDraft] = useState(settings.syncRepoUrl);
@@ -133,6 +139,12 @@ export function SettingsPage({
       syncLocalPath: nextSettings.syncLocalPath,
       lastError: "Reconnect to validate the updated sync settings.",
     });
+  }
+
+  function confirmReset(message: string, action: () => void) {
+    if (window.confirm(message)) {
+      action();
+    }
   }
 
   return (
@@ -310,7 +322,15 @@ export function SettingsPage({
               Validate Read Access
             </button>
             {!setupState.setupComplete && (
-              <button className={secondaryBtnClass} onClick={onResetSetup}>
+              <button
+                className={secondaryBtnClass}
+                onClick={() =>
+                  confirmReset(
+                    "Reset setup and reconnect? This clears setup completion and identity, then shows onboarding again. It will not delete repos or folders.",
+                    onResetSetup,
+                  )
+                }
+              >
                 <RotateCcw size={14} />
                 Reconnect
               </button>
@@ -371,7 +391,7 @@ export function SettingsPage({
           </button>
 
           {advancedOpen && (
-            <div className="mt-5 space-y-4">
+            <div className="mt-5 space-y-5">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
                   Sync repo URL override
@@ -419,10 +439,68 @@ export function SettingsPage({
                   <RefreshCw size={14} />
                   Re-check Prerequisites
                 </button>
-                <button className={secondaryBtnClass} onClick={onResetSetup}>
-                  <RotateCcw size={14} />
-                  Reset Setup
-                </button>
+              </div>
+
+              <div className="border-t border-border pt-5">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                  Reset
+                </h4>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+                  Uninstalling the app may keep local setup data. Use this reset
+                  when testing a fresh install. These actions do not delete
+                  project repos, source code, or the sync repo folder.
+                </p>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <button
+                    className={secondaryBtnClass}
+                    onClick={() =>
+                      confirmReset(
+                        "Reset setup only? This clears setup completion and identity, then shows onboarding again. It will not delete repos or folders.",
+                        onResetSetup,
+                      )
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    Reset setup only
+                  </button>
+                  <button
+                    className={secondaryBtnClass}
+                    onClick={() =>
+                      confirmReset(
+                        "Reset sessions and locks? This clears local sessions, locks, and local sync events. It will not remove repo paths or setup.",
+                        onResetSessionsAndLocks,
+                      )
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    Reset sessions and locks
+                  </button>
+                  <button
+                    className={secondaryBtnClass}
+                    onClick={() =>
+                      confirmReset(
+                        "Reset sync state? This clears local sync settings and events and disconnects this app from the sync repo. It will not delete the sync repo folder.",
+                        onResetSyncState,
+                      )
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    Reset sync state
+                  </button>
+                  <button
+                    className={secondaryBtnClass}
+                    onClick={() =>
+                      confirmReset(
+                        "Full reset local app data? This clears all Axiom Workspace localStorage keys and reloads the app. It will not delete project repos, source code, or sync folders.",
+                        onFullLocalReset,
+                      )
+                    }
+                  >
+                    <RotateCcw size={14} />
+                    Full reset local app data
+                  </button>
+                </div>
               </div>
             </div>
           )}
