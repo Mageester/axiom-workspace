@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import type { LiveRepo, WorkSession } from "../types";
 import { RepoCard } from "../components/RepoCard";
 import { PageHeader } from "../components/PageHeader";
 import { AddRepoModal } from "../components/AddRepoModal";
+import { RepoDiscoveryModal } from "../components/RepoDiscoveryModal";
 import { StartSessionModal } from "../components/StartSessionModal";
 import { primaryBtnClass, secondaryBtnClass } from "../lib/constants";
 import type { CreateSessionInput } from "../lib/sessions";
@@ -40,6 +41,7 @@ export function ReposPage({
   defaultUserName,
 }: ReposPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
 
   return (
@@ -60,6 +62,13 @@ export function ReposPage({
                 <RefreshCw size={14} />
               )}
               Refresh All
+            </button>
+            <button
+              className={secondaryBtnClass}
+              onClick={() => setShowDiscoveryModal(true)}
+            >
+              <Search size={14} />
+              Discover Repos
             </button>
             <button
               className={primaryBtnClass}
@@ -88,10 +97,10 @@ export function ReposPage({
             </p>
             <button
               className={primaryBtnClass}
-              onClick={() => setShowAddModal(true)}
+              onClick={() => setShowDiscoveryModal(true)}
             >
-              <Plus size={14} />
-              Add Your First Repo
+              <Search size={14} />
+              Discover Repos
             </button>
           </div>
         ) : (
@@ -117,6 +126,11 @@ export function ReposPage({
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={onAddRepo}
+      />
+      <RepoDiscoveryModal
+        open={showDiscoveryModal}
+        onClose={() => setShowDiscoveryModal(false)}
+        onAddRepo={onAddRepo}
       />
       <StartSessionModal
         open={sessionRepo !== null}

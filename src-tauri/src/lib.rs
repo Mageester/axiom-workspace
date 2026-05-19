@@ -9,6 +9,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             repos::get_repo_status,
             repos::get_multiple_repo_statuses,
+            repos::discover_local_repos,
             sync::check_git_installed,
             sync::validate_github_access,
             sync::get_default_sync_path,

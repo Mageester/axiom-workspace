@@ -37,10 +37,13 @@ The sync repo stores coordination state only. Project repositories remain normal
 ## Main Features
 
 - Repo status dashboard for local project health.
+- Automatic repo discovery in common local Axiom folders.
+- Smart repo profiles for Axiom Workspace, Axiom Site, and Axiom Pipeline Engine.
 - Dirty file diagnostics that explain uncommitted local changes.
-- Work sessions with titles, notes, branches, and lock targets.
+- One-click Start Work sessions with suggested lock targets.
 - Soft locks for files and folders.
 - Overlap warnings before starting conflicting work.
+- Quiet auto-refresh and debounced auto-sync for coordination state.
 - Zero-cost GitHub sync using Git instead of a paid backend.
 - First-run setup for name, device, Git checks, and sync connection.
 - Windows installer output from Tauri.
@@ -102,11 +105,11 @@ Tauri writes Windows installer artifacts under:
 src-tauri/target/release/bundle/
 ```
 
-Expected 0.1.0 installer filenames:
+Expected 0.3.0 installer filenames:
 
 ```text
-src-tauri/target/release/bundle/nsis/Axiom Workspace_0.1.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Axiom Workspace_0.1.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Axiom Workspace_0.3.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_0.3.0_x64_en-US.msi
 ```
 
 ## Reset Local Data
@@ -129,6 +132,8 @@ Close the app before manually deleting those folders. Do not delete project repo
 ## Safety Notes
 
 - Axiom Workspace reads project repo status, but does not sync project source code.
+- Automatic discovery scans only standard local folders at shallow depth.
+- Auto-sync writes coordination state only to the validated sync repo.
 - Soft locks are coordination warnings, not enforced Git locks.
 - GitHub authentication is handled by Git and Git Credential Manager.
 - The app should not store GitHub passwords or tokens.

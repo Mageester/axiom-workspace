@@ -39,6 +39,19 @@ export interface LiveRepo {
   lastCommandError?: string | null;
 }
 
+export interface DiscoveredRepo {
+  name: string;
+  path: string;
+  detectedType: string;
+  confidenceScore: number;
+  reason: string;
+}
+
+export interface RepoProfile {
+  friendlyName: string;
+  description: string;
+}
+
 export interface RepoDiagnostics {
   lastRefreshAt?: string;
   lastRefreshDurationMs?: number;
@@ -126,6 +139,10 @@ export interface SyncSettings {
   syncLocalPath: string;
   autoSyncEnabled: boolean;
   syncIntervalSeconds: number;
+  autoRefreshReposEnabled: boolean;
+  repoRefreshIntervalSeconds: number;
+  repoDiscoveryPaths: string[];
+  dismissedSuggestions: string[];
   lastSyncAt?: string;
   lastSyncStatus?: string;
   lastSyncError?: string;

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AlertTriangle, Clock, Plus, RefreshCw, Loader2, Timer } from "lucide-react";
+import { AlertTriangle, Clock, Plus, RefreshCw, Loader2, Search, Timer, X } from "lucide-react";
 import type {
   LiveRepo,
   RepoStatus,
@@ -13,9 +13,11 @@ import { StatusBadge } from "../components/StatusBadge";
 import { PageHeader } from "../components/PageHeader";
 import { StatCard } from "../components/StatCard";
 import { AddRepoModal } from "../components/AddRepoModal";
+import { RepoDiscoveryModal } from "../components/RepoDiscoveryModal";
 import { StartSessionModal } from "../components/StartSessionModal";
-import { secondaryBtnClass, primaryBtnClass } from "../lib/constants";
+import { iconBtnClass, secondaryBtnClass, primaryBtnClass } from "../lib/constants";
 import type { CreateSessionInput } from "../lib/sessions";
+import { getRepoDisplayName } from "../lib/repos";
 
 interface DashboardProps {
   repos: LiveRepo[];
@@ -35,6 +37,7 @@ interface DashboardProps {
   syncSettings: SyncSettings;
   syncStatus: SyncStatus;
   onSyncNow: () => Promise<void>;
+  onDismissSuggestion: (id: string) => void;
 }
 
 function formatDateTime(value?: string): string {
@@ -64,6 +67,17 @@ function syncStatusLabel(status: SyncStatus, setupComplete: boolean): string {
   }
 }
 
+function secondsAgo(value?: string): string {
+  if (!value) return "Not updated yet";
+  const numeric = Number(value);
+  const date = Number.isFinite(numeric) ? new Date(numeric * 1000) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not updated yet";
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return `Updated ${seconds} seconds ago.`;
+  const minutes = Math.floor(seconds / 60);
+  return `Updated ${minutes} minute${minutes === 1 ? "" : "s"} ago.`;
+}
+
 export function Dashboard({
   repos,
   repoNicknames,
@@ -82,8 +96,10 @@ export function Dashboard({
   syncSettings,
   syncStatus,
   onSyncNow,
+  onDismissSuggestion,
 }: DashboardProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
 
   const counts = useMemo(
@@ -107,6 +123,71 @@ export function Dashboard({
   const errorRepos = counts.error ?? 0;
   const syncing =
     syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
+  const suggestions = useMemo(() => {
+    const dismissed = new Set(syncSettings.dismissedSuggestions);
+    const items: {
+      id: string;
+      title: string;
+      explanation: string;
+      actionLabel?: string;
+      action?: () => void;
+    }[] = [];
+    const dirtyRepo = repos.find((repo) => repo.hasUncommittedChanges);
+    if (dirtyRepo) {
+      items.push({
+        id: `dirty-${dirtyRepo.path}`,
+        title: `${getRepoDisplayName(dirtyRepo, repoNicknames[dirtyRepo.path])} has uncommitted changes.`,
+        explanation: "Start a work session so Aidan and Riley can see what is in motion.",
+        actionLabel: "Start Work",
+        action: () => setSessionRepo(dirtyRepo),
+      });
+    }
+    if (activeSessions.length > 0 && !syncSettings.lastSyncAt) {
+      items.push({
+        id: "active-unsynced",
+        title: "Active sessions are not synced yet.",
+        explanation: "Share current locks and notes through the team sync workspace.",
+        actionLabel: "Sync Now",
+        action: () => void onSyncNow(),
+      });
+    }
+    const teammateSession = activeSessions.find(
+      (session) =>
+        session.userName.trim() &&
+        defaultUserName.trim() &&
+        session.userName.trim().toLowerCase() !== defaultUserName.trim().toLowerCase(),
+    );
+    if (teammateSession) {
+      items.push({
+        id: `teammate-${teammateSession.id}`,
+        title: `${teammateSession.userName} has an active lock in ${teammateSession.repoName}.`,
+        explanation: "Check the active session before starting overlapping work in this repo.",
+      });
+    }
+    const screenshotRepo = repos.find((repo) =>
+      repo.changedFiles.some((file) => file.path.startsWith(".codex-screenshots/")),
+    );
+    if (screenshotRepo) {
+      items.push({
+        id: `screenshots-${screenshotRepo.path}`,
+        title: `${getRepoDisplayName(screenshotRepo, repoNicknames[screenshotRepo.path])} is dirty because of .codex-screenshots/.`,
+        explanation: "Consider adding that generated folder to .gitignore if screenshots are only local test output.",
+      });
+    }
+    const lastSyncMs = syncSettings.lastSyncAt
+      ? new Date(syncSettings.lastSyncAt).getTime()
+      : 0;
+    if (setupState.setupComplete && lastSyncMs > 0 && Date.now() - lastSyncMs > 25 * 60_000) {
+      items.push({
+        id: "stale-sync",
+        title: "You have not synced in more than 25 minutes.",
+        explanation: "A quick sync keeps sessions and handoff notes current.",
+        actionLabel: "Sync Now",
+        action: () => void onSyncNow(),
+      });
+    }
+    return items.filter((item) => !dismissed.has(item.id)).slice(0, 3);
+  }, [activeSessions, defaultUserName, onSyncNow, repoNicknames, repos, setupState.setupComplete, syncSettings.dismissedSuggestions, syncSettings.lastSyncAt]);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -126,6 +207,13 @@ export function Dashboard({
                 <RefreshCw size={14} />
               )}
               Refresh
+            </button>
+            <button
+              className={secondaryBtnClass}
+              onClick={() => setShowDiscoveryModal(true)}
+            >
+              <Search size={14} />
+              Discover Repos
             </button>
             <button
               className={primaryBtnClass}
@@ -203,6 +291,40 @@ export function Dashboard({
           </div>
         </section>
 
+        {suggestions.length > 0 && (
+          <section className="mb-6 space-y-2">
+            {suggestions.map((suggestion) => (
+              <div
+                key={suggestion.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface-1 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text-primary">
+                    {suggestion.title}
+                  </p>
+                  <p className="mt-0.5 text-sm text-text-muted">
+                    {suggestion.explanation}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {suggestion.action && suggestion.actionLabel && (
+                    <button className={secondaryBtnClass} onClick={suggestion.action}>
+                      {suggestion.actionLabel}
+                    </button>
+                  )}
+                  <button
+                    className={iconBtnClass}
+                    title="Dismiss suggestion"
+                    onClick={() => onDismissSuggestion(suggestion.id)}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
         <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard label="Total Repos" value={repos.length} />
           <StatCard label="Clean Repos" value={cleanRepos} />
@@ -258,6 +380,9 @@ export function Dashboard({
                 {(counts.error ?? 0) > 0 && <StatusBadge status="error" />}
               </div>
             )}
+            <span className="text-xs text-text-muted">
+              {secondsAgo(repos[0]?.lastCheckedAt)}
+            </span>
           </div>
 
           {loading && repos.length === 0 ? (
@@ -277,10 +402,10 @@ export function Dashboard({
               </p>
               <button
                 className={primaryBtnClass}
-                onClick={() => setShowAddModal(true)}
+                onClick={() => setShowDiscoveryModal(true)}
               >
-                <Plus size={14} />
-                Add Your First Repo
+                <Search size={14} />
+                Discover Repos
               </button>
             </div>
           ) : (
@@ -307,6 +432,11 @@ export function Dashboard({
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={onAddRepo}
+      />
+      <RepoDiscoveryModal
+        open={showDiscoveryModal}
+        onClose={() => setShowDiscoveryModal(false)}
+        onAddRepo={onAddRepo}
       />
       <StartSessionModal
         open={sessionRepo !== null}

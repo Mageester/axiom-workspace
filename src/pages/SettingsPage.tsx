@@ -41,6 +41,7 @@ interface SettingsPageProps {
   onResetSessionsAndLocks: () => void;
   onResetSyncState: () => void;
   onFullLocalReset: () => void;
+  onResetDismissedSuggestions: () => void;
 }
 
 const fieldClass =
@@ -129,6 +130,7 @@ export function SettingsPage({
   onResetSessionsAndLocks,
   onResetSyncState,
   onFullLocalReset,
+  onResetDismissedSuggestions,
 }: SettingsPageProps) {
   const [identityDraft, setIdentityDraft] = useState(setupState.identity);
   const [repoUrlDraft, setRepoUrlDraft] = useState(settings.syncRepoUrl);
@@ -196,7 +198,6 @@ export function SettingsPage({
       ...settings,
       syncRepoUrl: repoUrlDraft.trim(),
       syncLocalPath: syncPathDraft.trim(),
-      autoSyncEnabled: false,
     };
     onSettingsChange(nextSettings);
     onSetupChange({
@@ -409,6 +410,116 @@ export function SettingsPage({
         <section className="rounded-lg border border-border bg-surface-1 p-5">
           <div className="mb-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+              Automation
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+              Axiom can keep repo status and coordination state fresh without
+              touching project source code.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3">
+              <div>
+                <p className="text-sm font-medium text-text-primary">
+                  Auto-refresh repo status
+                </p>
+                <p className="text-xs text-text-muted">
+                  Refreshes on startup, window focus, and a quiet timer.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.autoRefreshReposEnabled}
+                onChange={(event) =>
+                  onSettingsChange({
+                    ...settings,
+                    autoRefreshReposEnabled: event.target.checked,
+                  })
+                }
+                className="h-4 w-4 accent-indigo-500"
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3">
+              <div>
+                <p className="text-sm font-medium text-text-primary">
+                  Auto-sync after session changes
+                </p>
+                <p className="text-xs text-text-muted">
+                  Debounces session starts, endings, and note edits by five seconds.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.autoSyncEnabled}
+                onChange={(event) =>
+                  onSettingsChange({
+                    ...settings,
+                    autoSyncEnabled: event.target.checked,
+                  })
+                }
+                className="h-4 w-4 accent-indigo-500"
+              />
+            </label>
+
+            <label className="block rounded-md border border-border bg-surface-0 px-3 py-3">
+              <span className="mb-1.5 block text-sm font-medium text-text-primary">
+                Minimum refresh interval
+              </span>
+              <input
+                className={fieldClass}
+                type="number"
+                min={120}
+                step={30}
+                value={settings.repoRefreshIntervalSeconds}
+                onChange={(event) =>
+                  onSettingsChange({
+                    ...settings,
+                    repoRefreshIntervalSeconds: Math.max(
+                      120,
+                      Number(event.target.value) || 120,
+                    ),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Minimum is 120 seconds.
+              </p>
+            </label>
+
+            <label className="block rounded-md border border-border bg-surface-0 px-3 py-3">
+              <span className="mb-1.5 block text-sm font-medium text-text-primary">
+                Repo discovery paths
+              </span>
+              <textarea
+                className={`${fieldClass} min-h-24 resize-none font-mono text-xs`}
+                value={settings.repoDiscoveryPaths.join("\n")}
+                onChange={(event) =>
+                  onSettingsChange({
+                    ...settings,
+                    repoDiscoveryPaths: event.target.value
+                      .split(/\r?\n/)
+                      .map((line) => line.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Discovery uses these standard folders and limits scans to three levels.
+              </p>
+            </label>
+
+            <button className={secondaryBtnClass} onClick={onResetDismissedSuggestions}>
+              <RotateCcw size={14} />
+              Reset dismissed suggestions
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Diagnostics
             </h3>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
@@ -507,21 +618,6 @@ export function SettingsPage({
                   onChange={(event) => setSyncPathDraft(event.target.value)}
                 />
               </label>
-              <label className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-0 px-3 py-3">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    Auto-sync
-                  </p>
-                  <p className="text-xs text-text-muted">Coming soon</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={false}
-                  disabled
-                  className="h-4 w-4 accent-indigo-500"
-                />
-              </label>
-
               <div className="flex flex-wrap gap-2">
                 <button className={secondaryBtnClass} onClick={saveAdvanced}>
                   <Save size={14} />

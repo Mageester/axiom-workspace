@@ -20,6 +20,7 @@ import { revealItemInDir, openPath } from "@tauri-apps/plugin-opener";
 import type { LiveRepo, RepoChangeKind, WorkSession } from "../types";
 import { StatusBadge } from "./StatusBadge";
 import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
+import { getRepoDescription, getRepoDisplayName } from "../lib/repos";
 
 interface RepoCardProps {
   repo: LiveRepo;
@@ -95,6 +96,8 @@ export function RepoCard({
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
   const hasDirtyFiles = repo.status === "dirty" && repo.changedFileCount > 0;
+  const displayName = getRepoDisplayName(repo, nickname);
+  const description = getRepoDescription(repo);
   const hasDetails =
     hasDirtyFiles ||
     repo.status === "error" ||
@@ -169,14 +172,14 @@ export function RepoCard({
           ) : (
             <div className="flex items-center gap-1.5">
               <h3 className="truncate text-sm font-medium text-text-primary">
-                {nickname || repo.name}
+                {displayName}
               </h3>
               {onRename && (
                 <button
                   className={`${iconBtnClass} shrink-0`}
                   title="Edit display name"
                   onClick={() => {
-                    setEditValue(nickname || repo.name);
+                    setEditValue(displayName);
                     setEditing(true);
                     setTimeout(() => editRef.current?.select(), 0);
                   }}
@@ -200,6 +203,9 @@ export function RepoCard({
               <Copy size={10} />
             </button>
           </div>
+          {description && (
+            <p className="mt-1 text-xs text-text-secondary">{description}</p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <StatusBadge status={repo.status} />
@@ -223,8 +229,8 @@ export function RepoCard({
             )}
           </button>
           <button
-            onClick={() => {
-              if (window.confirm(`Remove ${repo.name} from Axiom? This does not delete the repo folder.`)) {
+                onClick={() => {
+              if (window.confirm(`Remove ${displayName} from Axiom? This does not delete the repo folder.`)) {
                 onRemove();
               }
             }}
@@ -380,7 +386,7 @@ export function RepoCard({
         onClick={onStartSession}
       >
         <Play size={14} />
-        Start Session
+        Start Work
       </button>
     </div>
   );

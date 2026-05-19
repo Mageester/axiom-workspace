@@ -14,6 +14,17 @@ const IDENTITY_KEY = "axiom-workspace:device-identity";
 const SETTINGS_KEY = "axiom-workspace:sync-settings";
 const EVENTS_KEY = "axiom-workspace:events";
 const REPO_PATHS_KEY = "axiom-repo-paths";
+const REPO_NICKNAMES_KEY = "axiom-repo-nicknames";
+const IGNORED_DISCOVERY_KEY = "axiom-workspace:ignored-discovered-repos";
+const DEFAULT_DISCOVERY_PATHS = [
+  "%USERPROFILE%\\Desktop",
+  "%USERPROFILE%\\Documents",
+  "%USERPROFILE%\\OneDrive\\Desktop",
+  "%USERPROFILE%\\OneDrive\\Documents",
+  "%USERPROFILE%\\source\\repos",
+  "%USERPROFILE%\\OneDrive\\Desktop\\Repos",
+  "%USERPROFILE%\\Desktop\\Repos",
+];
 
 export const DEFAULT_SYNC_REPO_URL =
   "https://github.com/Mageester/axiom-workspace-sync";
@@ -135,6 +146,8 @@ export function isWorkspaceEvent(value: unknown): value is WorkspaceEvent {
       "session_updated",
       "note_added",
       "snapshot_created",
+      "sync_completed",
+      "repo_refreshed",
     ].includes(String(value.type)) &&
     typeof value.deviceId === "string" &&
     typeof value.userName === "string" &&
@@ -295,12 +308,16 @@ export function clearAxiomLocalStorage(): void {
       }
     }
     keys.forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem(REPO_NICKNAMES_KEY);
+    localStorage.removeItem(IGNORED_DISCOVERY_KEY);
   } catch {
     localStorage.removeItem(SETUP_KEY);
     localStorage.removeItem(IDENTITY_KEY);
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(EVENTS_KEY);
     localStorage.removeItem(REPO_PATHS_KEY);
+    localStorage.removeItem(REPO_NICKNAMES_KEY);
+    localStorage.removeItem(IGNORED_DISCOVERY_KEY);
   }
 }
 
@@ -312,6 +329,10 @@ export function createDefaultSyncSettings(
     syncLocalPath: setupState.syncLocalPath,
     autoSyncEnabled: false,
     syncIntervalSeconds: 300,
+    autoRefreshReposEnabled: true,
+    repoRefreshIntervalSeconds: 120,
+    repoDiscoveryPaths: DEFAULT_DISCOVERY_PATHS,
+    dismissedSuggestions: [],
   };
 }
 
@@ -337,6 +358,22 @@ export function loadSyncSettings(): SyncSettings {
           parsed.syncIntervalSeconds >= 60
             ? parsed.syncIntervalSeconds
             : 300,
+        autoRefreshReposEnabled: parsed.autoRefreshReposEnabled !== false,
+        repoRefreshIntervalSeconds:
+          typeof parsed.repoRefreshIntervalSeconds === "number" &&
+          parsed.repoRefreshIntervalSeconds >= 120
+            ? parsed.repoRefreshIntervalSeconds
+            : 120,
+        repoDiscoveryPaths:
+          Array.isArray(parsed.repoDiscoveryPaths) &&
+          parsed.repoDiscoveryPaths.every((item) => typeof item === "string")
+            ? parsed.repoDiscoveryPaths
+            : DEFAULT_DISCOVERY_PATHS,
+        dismissedSuggestions:
+          Array.isArray(parsed.dismissedSuggestions) &&
+          parsed.dismissedSuggestions.every((item) => typeof item === "string")
+            ? parsed.dismissedSuggestions
+            : [],
         lastSyncAt:
           typeof parsed.lastSyncAt === "string" ? parsed.lastSyncAt : undefined,
         lastSyncStatus:
@@ -466,12 +503,18 @@ export function applyWorkspaceEvent(
   if (event.type === "session_ended") {
     const sessionId = event.payload.sessionId;
     const endedAt = event.payload.endedAt;
+    const endNote = event.payload.endNote;
     if (typeof sessionId !== "string" || typeof endedAt !== "string") {
       return sessions;
     }
     return sessions.map((session) =>
       session.id === sessionId
-        ? { ...session, status: "ended" as const, endedAt }
+        ? {
+            ...session,
+            status: "ended" as const,
+            endedAt,
+            endNote: typeof endNote === "string" ? endNote : session.endNote,
+          }
         : session,
     );
   }

@@ -11,6 +11,7 @@ import type {
   WorkspaceEvent,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
+import { RepoDiscoveryModal } from "./components/RepoDiscoveryModal";
 import { Dashboard } from "./pages/Dashboard";
 import { ActivityPage } from "./pages/ActivityPage";
 import { ReposPage } from "./pages/ReposPage";
@@ -55,7 +56,7 @@ import {
   validateSyncWriteAccess,
 } from "./lib/sync";
 
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.3.0";
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -123,6 +124,7 @@ function App() {
   const [repoNicknames, setRepoNicknames] = useState<Record<string, string>>(
     () => loadRepoNicknames(),
   );
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupChecking, setSetupChecking] = useState(false);
   const [setupMessage, setSetupMessage] = useState("");
@@ -130,6 +132,11 @@ function App() {
   const [gitVersion, setGitVersion] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const syncInFlightRef = useRef(false);
+  const autoSyncTimerRef = useRef<number | null>(null);
+  const sessionsRef = useRef(sessions);
+  const eventsRef = useRef(events);
+  const setupStateRef = useRef(setupState);
+  const syncSettingsRef = useRef(syncSettings);
   const setupInFlightRef = useRef(false);
   const setupCheckInFlightRef = useRef(false);
   const {
@@ -141,7 +148,10 @@ function App() {
     removeRepo,
     refreshRepo,
     refreshAll,
-  } = useRepos();
+  } = useRepos({
+    autoRefreshEnabled: syncSettings.autoRefreshReposEnabled,
+    minimumRefreshIntervalSeconds: syncSettings.repoRefreshIntervalSeconds,
+  });
 
   const activeSessions = useMemo(
     () => getActiveSessions(sessions),
@@ -157,9 +167,33 @@ function App() {
   }, [setupState]);
 
   useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  useEffect(() => {
+    setupStateRef.current = setupState;
+  }, [setupState]);
+
+  useEffect(() => {
+    syncSettingsRef.current = syncSettings;
+  }, [syncSettings]);
+
+  useEffect(() => {
     void runSetupCheck(false);
     // Run once on startup; setupState changes are handled by direct updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (autoSyncTimerRef.current !== null) {
+        window.clearTimeout(autoSyncTimerRef.current);
+      }
+    };
   }, []);
 
   function updateChecklistItem(
@@ -353,9 +387,11 @@ function App() {
         ...syncSettings,
         syncRepoUrl: nextSetupState.syncRepoUrl,
         syncLocalPath: nextSetupState.syncLocalPath,
-        autoSyncEnabled: false,
+        autoSyncEnabled: true,
       });
       setSetupMessage(setup.message);
+      setActiveNav("dashboard");
+      setShowDiscoveryModal(true);
       updateChecklistItem("github", {
         status: "complete",
         message: writeAccess.message,
@@ -411,6 +447,7 @@ function App() {
       saveEvents(next);
       return next;
     });
+    scheduleAutoSync();
   }
 
   function finishSession(sessionId: string, endNote?: string) {
@@ -429,6 +466,7 @@ function App() {
           saveEvents(eventNext);
           return eventNext;
         });
+        scheduleAutoSync();
       }
       return next;
     });
@@ -438,9 +476,10 @@ function App() {
     setSessions((prev) => {
       const next = updateSessionNotes(prev, sessionId, notes);
       saveSessions(next);
+      const session = next.find((item) => item.id === sessionId);
       const event = createWorkspaceEvent(
         "session_updated",
-        { sessionId, notes },
+        session ? { session } : { sessionId, notes },
         setupState.identity,
       );
       setEvents((eventPrev) => {
@@ -450,6 +489,28 @@ function App() {
       });
       return next;
     });
+    scheduleAutoSync();
+  }
+
+  function scheduleAutoSync() {
+    if (
+      !setupStateRef.current.setupComplete ||
+      !syncSettingsRef.current.autoSyncEnabled ||
+      !syncSettingsRef.current.syncLocalPath.trim()
+    ) {
+      return;
+    }
+
+    if (autoSyncTimerRef.current !== null) {
+      window.clearTimeout(autoSyncTimerRef.current);
+    }
+
+    autoSyncTimerRef.current = window.setTimeout(() => {
+      autoSyncTimerRef.current = null;
+      if (!syncInFlightRef.current) {
+        void handleSyncNow(true);
+      }
+    }, 5000);
   }
 
   function handleRenameRepo(path: string, name: string) {
@@ -487,7 +548,7 @@ function App() {
     saveEvents(clean);
   }
 
-  async function handleSyncNow() {
+  async function handleSyncNow(isAutomatic = false) {
     if (syncInFlightRef.current) {
       return;
     }
@@ -495,46 +556,51 @@ function App() {
     syncInFlightRef.current = true;
 
     try {
-      if (!setupState.setupComplete || !syncSettings.syncLocalPath.trim()) {
+      const currentSetupState = setupStateRef.current;
+      const currentSyncSettings = syncSettingsRef.current;
+      const currentSessions = sessionsRef.current;
+      const currentEvents = eventsRef.current;
+
+      if (!currentSetupState.setupComplete || !currentSyncSettings.syncLocalPath.trim()) {
         const message =
           "Axiom is local-only until the team sync workspace is connected.";
         setSyncStatus("error");
         persistSyncSettings({
-          ...syncSettings,
+          ...currentSyncSettings,
           lastSyncStatus: "Error",
-          lastSyncError: message,
+          lastSyncError: isAutomatic ? "Auto-sync failed. Click Sync Now." : message,
         });
         return;
       }
 
       setSyncStatus("checking");
       persistSyncSettings({
-        ...syncSettings,
+        ...currentSyncSettings,
         lastSyncStatus: "Checking",
         lastSyncError: undefined,
       });
 
       setSyncStatus("writing_local_events");
       const snapshot = buildSnapshotFromSessions(
-        sessions,
-        events,
-        setupState.identity,
+        currentSessions,
+        currentEvents,
+        currentSetupState.identity,
       );
       const result = await syncNow(
-        syncSettings.syncLocalPath,
-        syncSettings.syncRepoUrl,
-        events,
+        currentSyncSettings.syncLocalPath,
+        currentSyncSettings.syncRepoUrl,
+        currentEvents,
         snapshot,
       );
 
       setSyncStatus("merging");
-      const mergedEvents = dedupeEvents([...events, ...result.events]);
-      const mergedSessions = applyWorkspaceEvents(sessions, mergedEvents);
+      const mergedEvents = dedupeEvents([...currentEvents, ...result.events]);
+      const mergedSessions = applyWorkspaceEvents(currentSessions, mergedEvents);
       updateEvents(mergedEvents);
       updateSessions(mergedSessions);
 
       const nextSettings: SyncSettings = {
-        ...syncSettings,
+        ...currentSyncSettings,
         lastSyncAt: new Date().toISOString(),
         lastSyncStatus: result.message,
         lastSyncError: undefined,
@@ -554,15 +620,32 @@ function App() {
         "Sync could not upload changes. Check internet and GitHub login.",
       );
       persistSyncSettings({
-        ...syncSettings,
+        ...syncSettingsRef.current,
         lastSyncStatus: "Error",
-        lastSyncError: message,
+        lastSyncError: isAutomatic ? "Auto-sync failed. Click Sync Now." : message,
         lastSyncCommandError: message,
       });
       setSyncStatus("error");
     } finally {
       syncInFlightRef.current = false;
     }
+  }
+
+  function handleDismissSuggestion(id: string) {
+    const dismissed = Array.from(
+      new Set([...(syncSettings.dismissedSuggestions ?? []), id]),
+    );
+    persistSyncSettings({
+      ...syncSettings,
+      dismissedSuggestions: dismissed,
+    });
+  }
+
+  function handleResetDismissedSuggestions() {
+    persistSyncSettings({
+      ...syncSettings,
+      dismissedSuggestions: [],
+    });
   }
 
   function handleResetSetup() {
@@ -633,6 +716,7 @@ function App() {
           syncSettings={syncSettings}
           syncStatus={syncStatus}
           onSyncNow={handleSyncNow}
+          onDismissSuggestion={handleDismissSuggestion}
         />
       );
     }
@@ -699,6 +783,7 @@ function App() {
           onResetSessionsAndLocks={handleResetSessionsAndLocks}
           onResetSyncState={handleResetSyncState}
           onFullLocalReset={handleFullLocalReset}
+          onResetDismissedSuggestions={handleResetDismissedSuggestions}
         />
       );
     }
@@ -727,6 +812,11 @@ function App() {
         onNavigate={setActiveNav}
         setupComplete={setupState.setupComplete}
         activeSessionCount={activeSessions.length}
+      />
+      <RepoDiscoveryModal
+        open={showDiscoveryModal}
+        onClose={() => setShowDiscoveryModal(false)}
+        onAddRepo={addRepo}
       />
       {renderPage()}
     </div>

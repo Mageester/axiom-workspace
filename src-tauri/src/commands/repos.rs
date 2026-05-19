@@ -1,8 +1,10 @@
 use super::process;
 use serde::Serialize;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
+use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,6 +66,16 @@ pub struct RepoStatus {
     pub refresh_duration_ms: u128,
     pub git_command_count: u32,
     pub last_command_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredRepo {
+    pub name: String,
+    pub path: String,
+    pub detected_type: String,
+    pub confidence_score: u8,
+    pub reason: String,
 }
 
 struct DirtySummary {
@@ -199,6 +211,150 @@ fn repo_name_from_path(path: &str) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string())
+}
+
+fn normalize_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn known_axiom_profile(name: &str) -> Option<(&'static str, u8)> {
+    match normalize_name(name).as_str() {
+        "axiomworkspace" => Some(("Axiom Workspace", 98)),
+        "axiomsite" | "getaxiom" => Some(("Axiom Site", 96)),
+        "axiompipelineengine" => Some(("Axiom Pipeline Engine", 96)),
+        _ => None,
+    }
+}
+
+fn detect_repo_type(path: &Path) -> String {
+    if path.join("src-tauri").exists() && path.join("package.json").exists() {
+        "Tauri app".to_string()
+    } else if path.join("package.json").exists() {
+        "Node frontend".to_string()
+    } else if path.join("Cargo.toml").exists() {
+        "Rust".to_string()
+    } else if path.join("pyproject.toml").exists() || path.join("requirements.txt").exists() {
+        "Python".to_string()
+    } else {
+        "Git repo".to_string()
+    }
+}
+
+fn should_skip_dir(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        ".git"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | ".next"
+            | ".nuxt"
+            | ".cache"
+            | ".tauri"
+            | "vendor"
+    )
+}
+
+fn discovery_roots() -> Vec<PathBuf> {
+    let home = std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
+    let Some(home) = home else {
+        return Vec::new();
+    };
+
+    vec![
+        home.join("Desktop"),
+        home.join("Documents"),
+        home.join("OneDrive").join("Desktop"),
+        home.join("OneDrive").join("Documents"),
+        home.join("source").join("repos"),
+        home.join("OneDrive").join("Desktop").join("Repos"),
+        home.join("Desktop").join("Repos"),
+    ]
+}
+
+fn push_repo_candidate(path: &Path, output: &mut Vec<DiscoveredRepo>, seen: &mut HashSet<String>) {
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path_text = canonical.to_string_lossy().to_string();
+    let dedupe_key = path_text.to_lowercase();
+    if !seen.insert(dedupe_key) {
+        return;
+    }
+
+    let name = canonical
+        .file_name()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_text.clone());
+    let detected_type = detect_repo_type(&canonical);
+    let (confidence_score, reason) = match known_axiom_profile(&name) {
+        Some((friendly, score)) => (
+            score,
+            format!("Recognized as {} by repository folder name.", friendly),
+        ),
+        None if matches!(
+            detected_type.as_str(),
+            "Tauri app" | "Node frontend" | "Rust" | "Python"
+        ) =>
+        {
+            (
+                72,
+                format!("Detected a {} project with Git metadata.", detected_type),
+            )
+        }
+        None => (58, "Detected a local Git repository.".to_string()),
+    };
+
+    output.push(DiscoveredRepo {
+        name,
+        path: path_text,
+        detected_type,
+        confidence_score,
+        reason,
+    });
+}
+
+fn scan_for_repos(
+    dir: &Path,
+    depth: u8,
+    output: &mut Vec<DiscoveredRepo>,
+    seen: &mut HashSet<String>,
+) {
+    if depth > 3 || output.len() >= 80 || !dir.is_dir() {
+        return;
+    }
+
+    if dir.join(".git").exists() {
+        push_repo_candidate(dir, output, seen);
+        return;
+    }
+
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        if output.len() >= 80 {
+            return;
+        }
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if should_skip_dir(name) {
+            continue;
+        }
+        scan_for_repos(&path, depth + 1, output, seen);
+    }
 }
 
 fn error_status(
@@ -390,6 +546,28 @@ pub fn get_multiple_repo_statuses(paths: Vec<String>) -> Vec<RepoStatus> {
         .into_iter()
         .filter_map(|handle| handle.join().ok())
         .collect()
+}
+
+#[tauri::command]
+pub fn discover_local_repos() -> Vec<DiscoveredRepo> {
+    let mut repos = Vec::new();
+    let mut seen = HashSet::new();
+    let mut root_seen = HashSet::new();
+
+    for root in discovery_roots() {
+        let canonical = fs::canonicalize(&root).unwrap_or(root);
+        let key = canonical.to_string_lossy().to_string().to_lowercase();
+        if root_seen.insert(key) {
+            scan_for_repos(&canonical, 0, &mut repos, &mut seen);
+        }
+    }
+
+    repos.sort_by(|a, b| {
+        b.confidence_score
+            .cmp(&a.confidence_score)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    repos
 }
 
 #[cfg(test)]

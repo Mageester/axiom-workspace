@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Plus, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import type { LiveRepo, LockTarget, SessionOverlap, WorkSession } from "../types";
 import {
   createLockTarget,
@@ -7,6 +7,7 @@ import {
   type CreateSessionInput,
 } from "../lib/sessions";
 import { primaryBtnClass, secondaryBtnClass, iconBtnClass } from "../lib/constants";
+import { getRepoDisplayName } from "../lib/repos";
 
 interface StartSessionModalProps {
   open: boolean;
@@ -52,6 +53,28 @@ export function StartSessionModal({
   const [targets, setTargets] = useState<LockTarget[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [hasConfirmedOverlap, setHasConfirmedOverlap] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [targetTouched, setTargetTouched] = useState(false);
+
+  function inferTarget(repo: LiveRepo | null, workTitle: string): LockTarget {
+    if (!repo || repo.changedFiles.length === 0) {
+      return createLockTarget("area", workTitle.trim() || "general work");
+    }
+    if (repo.changedFileCount === 1 && repo.changedFiles[0]) {
+      return createLockTarget("file", repo.changedFiles[0].path);
+    }
+    const folders = Array.from(
+      new Set(
+        repo.changedFiles
+          .map((file) => file.path.split("/").slice(0, -1).join("/"))
+          .filter(Boolean),
+      ),
+    );
+    if (folders.length === 1) {
+      return createLockTarget("folder", folders[0]);
+    }
+    return createLockTarget("area", workTitle.trim() || "general work");
+  }
 
   useEffect(() => {
     if (!open) {
@@ -65,15 +88,34 @@ export function StartSessionModal({
       setTargets([]);
       setErrors({});
       setHasConfirmedOverlap(false);
+      setAdvancedOpen(false);
+      setTargetTouched(false);
       return;
     }
 
-    setRepoId(initialRepo?.id ?? repos[0]?.id ?? "");
-    setBranch(initialRepo?.currentBranch ?? "");
+    const repo = initialRepo ?? repos[0] ?? null;
+    const inferredTarget = inferTarget(repo, "");
+    setRepoId(repo?.id ?? "");
+    setBranch(repo?.currentBranch ?? "");
     setUserName(defaultUserName);
+    setTargetType(inferredTarget.type);
+    setTargetValue(inferredTarget.value);
+    setTargets([inferredTarget]);
+    setAdvancedOpen(false);
+    setTargetTouched(false);
   }, [defaultUserName, initialRepo, open, repos]);
 
   const selectedRepo = repos.find((repo) => repo.id === repoId) ?? null;
+
+  useEffect(() => {
+    if (!open || targetTouched || !selectedRepo) {
+      return;
+    }
+    const inferredTarget = inferTarget(selectedRepo, title);
+    setTargetType(inferredTarget.type);
+    setTargetValue(inferredTarget.value);
+    setTargets([inferredTarget]);
+  }, [open, selectedRepo, targetTouched, title]);
 
   const sessionInput = useMemo<CreateSessionInput | null>(() => {
     if (!selectedRepo) {
@@ -82,7 +124,7 @@ export function StartSessionModal({
 
     return {
       repoId: selectedRepo.id,
-      repoName: selectedRepo.name,
+      repoName: getRepoDisplayName(selectedRepo),
       repoPath: selectedRepo.path,
       userName,
       title,
@@ -115,7 +157,9 @@ export function StartSessionModal({
     if (!title.trim()) {
       nextErrors.title = "Name the work session.";
     }
-    if (targets.length === 0) {
+    const effectiveTargets =
+      targets.length > 0 ? targets : [createLockTarget(targetType, targetValue)];
+    if (effectiveTargets.length === 0 || !effectiveTargets.some((target) => target.value.trim())) {
       nextErrors.targets = "Add at least one lock target.";
     }
     return nextErrors;
@@ -166,10 +210,10 @@ export function StartSessionModal({
         <div className="flex items-start justify-between border-b border-border px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">
-              Start Session
+              Start Work
             </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Claim local work areas and flag overlap before people collide.
+              Axiom prefills repo, branch, user, and a likely target from local changes.
             </p>
           </div>
           <button className={iconBtnClass} onClick={onClose} title="Close">
@@ -179,7 +223,7 @@ export function StartSessionModal({
 
         <div className="space-y-5 px-5 py-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <label className="block">
+            <label className="block md:col-span-2">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
                 Repo
               </span>
@@ -190,12 +234,17 @@ export function StartSessionModal({
                   const repo = repos.find((item) => item.id === event.target.value);
                   setRepoId(event.target.value);
                   setBranch(repo?.currentBranch ?? "");
+                  const inferredTarget = inferTarget(repo ?? null, title);
+                  setTargetType(inferredTarget.type);
+                  setTargetValue(inferredTarget.value);
+                  setTargets([inferredTarget]);
+                  setTargetTouched(false);
                   setHasConfirmedOverlap(false);
                 }}
               >
                 {repos.map((repo) => (
                   <option key={repo.id} value={repo.id}>
-                    {repo.name}
+                    {getRepoDisplayName(repo)}
                   </option>
                 ))}
               </select>
@@ -204,28 +253,12 @@ export function StartSessionModal({
               )}
             </label>
 
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-                User
-              </span>
-              <input
-                className={fieldClass}
-                value={userName}
-                onChange={(event) => setUserName(event.target.value)}
-                placeholder="Aidan or Riley"
-              />
-              {errors.userName && (
-                <p className="mt-1 text-xs text-status-locked">
-                  {errors.userName}
-                </p>
-              )}
-            </label>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-                Title
+                What are you working on?
               </span>
               <input
                 className={fieldClass}
@@ -240,14 +273,21 @@ export function StartSessionModal({
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
-                Branch
+                Suggested target
               </span>
               <input
                 className={fieldClass}
-                value={branch}
-                onChange={(event) => setBranch(event.target.value)}
-                placeholder="Optional"
+                value={targets[0]?.value ?? targetValue}
+                onChange={(event) => {
+                  setTargetValue(event.target.value);
+                  setTargets([createLockTarget(targetType, event.target.value)]);
+                  setTargetTouched(true);
+                }}
+                placeholder="src/components or dashboard cards"
               />
+              <p className="mt-1 text-xs text-text-muted">
+                {formatTargetType(targets[0]?.type ?? targetType)}
+              </p>
             </label>
           </div>
 
@@ -264,71 +304,127 @@ export function StartSessionModal({
           </label>
 
           <div className="rounded-lg border border-border bg-surface-0 p-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[150px_1fr_auto]">
-              <select
-                className={fieldClass}
-                value={targetType}
-                onChange={(event) =>
-                  setTargetType(event.target.value as LockTarget["type"])
-                }
-              >
-                <option value="area">Area</option>
-                <option value="folder">Folder</option>
-                <option value="file">File</option>
-              </select>
+            <button
+              className="flex w-full items-center justify-between text-left"
+              onClick={() => setAdvancedOpen((open) => !open)}
+            >
               <div>
-                <input
-                  className={fieldClass}
-                  value={targetValue}
-                  onChange={(event) => setTargetValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTarget();
-                    }
-                  }}
-                  placeholder="src/components or dashboard cards"
-                />
-                {errors.targetValue && (
-                  <p className="mt-1 text-xs text-status-locked">
-                    {errors.targetValue}
+                <p className="text-sm font-medium text-text-primary">
+                  Advanced fields
+                </p>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  Edit user, branch, target type, or add extra targets.
+                </p>
+              </div>
+              {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+
+            {advancedOpen && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                      User
+                    </span>
+                    <input
+                      className={fieldClass}
+                      value={userName}
+                      onChange={(event) => setUserName(event.target.value)}
+                      placeholder="Aidan or Riley"
+                    />
+                    {errors.userName && (
+                      <p className="mt-1 text-xs text-status-locked">
+                        {errors.userName}
+                      </p>
+                    )}
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                      Branch
+                    </span>
+                    <input
+                      className={fieldClass}
+                      value={branch}
+                      onChange={(event) => setBranch(event.target.value)}
+                      placeholder="Optional"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[150px_1fr_auto]">
+                  <select
+                    className={fieldClass}
+                    value={targetType}
+                    onChange={(event) => {
+                    setTargetType(event.target.value as LockTarget["type"]);
+                    setTargetTouched(true);
+                    }}
+                  >
+                    <option value="area">Area</option>
+                    <option value="folder">Folder</option>
+                    <option value="file">File</option>
+                  </select>
+                  <div>
+                    <input
+                      className={fieldClass}
+                      value={targetValue}
+                      onChange={(event) => {
+                        setTargetValue(event.target.value);
+                        setTargetTouched(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTarget();
+                        }
+                      }}
+                      placeholder="src/components or dashboard cards"
+                    />
+                    {errors.targetValue && (
+                      <p className="mt-1 text-xs text-status-locked">
+                        {errors.targetValue}
+                      </p>
+                    )}
+                  </div>
+                  <button className={secondaryBtnClass} onClick={addTarget}>
+                    <Plus size={14} />
+                    Add
+                  </button>
+                </div>
+
+                {errors.targets && (
+                  <p className="mt-2 text-xs text-status-locked">
+                    {errors.targets}
                   </p>
                 )}
-              </div>
-              <button className={secondaryBtnClass} onClick={addTarget}>
-                <Plus size={14} />
-                Add
-              </button>
-            </div>
 
-            {errors.targets && (
-              <p className="mt-2 text-xs text-status-locked">{errors.targets}</p>
-            )}
-
-            {targets.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {targets.map((target) => (
-                  <div
-                    key={target.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-1 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                        {formatTargetType(target.type)}
-                      </p>
-                      <p className="truncate text-sm text-text-primary">
-                        {target.value}
-                      </p>
-                    </div>
-                    <button
-                      className={iconBtnClass}
-                      onClick={() => removeTarget(target.id)}
-                      title="Remove target"
-                    >
-                      <X size={14} />
-                    </button>
+                {targets.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {targets.map((target) => (
+                      <div
+                        key={target.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-1 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                            {formatTargetType(target.type)}
+                          </p>
+                          <p className="truncate text-sm text-text-primary">
+                            {target.value}
+                          </p>
+                        </div>
+                        <button
+                          className={iconBtnClass}
+                          onClick={() => removeTarget(target.id)}
+                          title="Remove target"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -370,7 +466,7 @@ export function StartSessionModal({
               ? "Review Warning"
               : overlaps.length > 0
                 ? "Start Anyway"
-                : "Start Session"}
+              : "Start Work"}
           </button>
         </div>
       </div>

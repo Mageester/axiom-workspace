@@ -19,7 +19,16 @@ interface UseReposReturn {
   refreshAll: () => Promise<void>;
 }
 
-export function useRepos(): UseReposReturn {
+interface UseReposOptions {
+  autoRefreshEnabled?: boolean;
+  minimumRefreshIntervalSeconds?: number;
+}
+
+export function useRepos(options: UseReposOptions = {}): UseReposReturn {
+  const {
+    autoRefreshEnabled = true,
+    minimumRefreshIntervalSeconds = 120,
+  } = options;
   const [repos, setRepos] = useState<LiveRepo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshingPaths, setRefreshingPaths] = useState<Set<string>>(
@@ -28,6 +37,7 @@ export function useRepos(): UseReposReturn {
   const [diagnostics, setDiagnostics] = useState<RepoDiagnostics>({});
   const refreshAllInFlightRef = useRef(false);
   const refreshingPathsRef = useRef<Set<string>>(new Set());
+  const lastRefreshMsRef = useRef(0);
 
   const recordDiagnostics = useCallback(
     (statuses: LiveRepo[], fallbackPath?: string) => {
@@ -74,6 +84,7 @@ export function useRepos(): UseReposReturn {
       const statuses = await getMultipleRepoStatuses(paths);
       setRepos(statuses);
       recordDiagnostics(statuses);
+      lastRefreshMsRef.current = Date.now();
     } catch {
       // If bulk call fails, keep existing repos
     } finally {
@@ -94,6 +105,7 @@ export function useRepos(): UseReposReturn {
         prev.map((r) => (r.path === path ? status : r)),
       );
       recordDiagnostics([status], path);
+      lastRefreshMsRef.current = Date.now();
     } finally {
       refreshingPathsRef.current.delete(path);
       setRefreshingPaths((prev) => {
@@ -135,6 +147,36 @@ export function useRepos(): UseReposReturn {
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return;
+    }
+
+    const intervalMs = Math.max(120, minimumRefreshIntervalSeconds) * 1000;
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastRefreshMsRef.current >= intervalMs) {
+        void refreshAll();
+      }
+    }, intervalMs);
+
+    return () => window.clearInterval(timer);
+  }, [autoRefreshEnabled, minimumRefreshIntervalSeconds, refreshAll]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return;
+    }
+
+    function handleFocus() {
+      if (Date.now() - lastRefreshMsRef.current > 60_000) {
+        void refreshAll();
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [autoRefreshEnabled, refreshAll]);
 
   return {
     repos,
