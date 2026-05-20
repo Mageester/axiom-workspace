@@ -71,7 +71,7 @@ import {
 } from "./lib/sync";
 import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "0.8.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
