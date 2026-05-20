@@ -553,6 +553,65 @@ export async function checkGitInstalled(): Promise<GitInstallCheck> {
   return invoke<GitInstallCheck>("check_git_installed");
 }
 
+export interface SystemIdentity {
+  userName: string;
+  hostName: string;
+}
+
+export async function getSystemIdentity(): Promise<SystemIdentity> {
+  return invoke<SystemIdentity>("get_system_identity");
+}
+
+export interface UpdateCheckResult {
+  available: boolean;
+  latestVersion: string;
+  url: string;
+  notes: string;
+}
+
+function normalizeVersion(value: string): string {
+  return value.trim().replace(/^v/i, "").replace(/-.+$/, "");
+}
+
+function compareVersions(a: string, b: string): number {
+  const segA = normalizeVersion(a).split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const segB = normalizeVersion(b).split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const length = Math.max(segA.length, segB.length);
+  for (let i = 0; i < length; i += 1) {
+    const diff = (segA[i] ?? 0) - (segB[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+export async function checkForUpdate(
+  currentVersion: string,
+): Promise<UpdateCheckResult | null> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/Mageester/axiom-workspace/releases/latest",
+      {
+        headers: { Accept: "application/vnd.github+json" },
+      },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as {
+      tag_name?: string;
+      html_url?: string;
+      body?: string;
+    };
+    const tag = data.tag_name ?? "";
+    const url = data.html_url ?? "https://github.com/Mageester/axiom-workspace/releases";
+    if (!tag) return null;
+    if (compareVersions(tag, currentVersion) <= 0) {
+      return { available: false, latestVersion: tag, url, notes: data.body ?? "" };
+    }
+    return { available: true, latestVersion: tag, url, notes: data.body ?? "" };
+  } catch {
+    return null;
+  }
+}
+
 export async function validateGithubAccess(
   syncRepoUrl: string,
 ): Promise<GithubAccessValidation> {

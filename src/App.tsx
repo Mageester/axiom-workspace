@@ -33,6 +33,7 @@ import { loadRepoNicknames, setRepoNickname } from "./lib/repos";
 import {
   applyWorkspaceEvents,
   buildSnapshotFromSessions,
+  checkForUpdate,
   checkGitInstalled,
   clearAxiomLocalStorage,
   createDefaultSyncSettings,
@@ -40,6 +41,7 @@ import {
   dedupeEvents,
   DEFAULT_SYNC_REPO_URL,
   getDefaultSyncPath,
+  getSystemIdentity,
   loadEvents,
   loadSetupState,
   loadSyncSettings,
@@ -53,10 +55,15 @@ import {
   syncNow,
   validateGithubAccess,
   validateSyncWriteAccess,
+  type UpdateCheckResult,
 } from "./lib/sync";
+import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths } from "./lib/repos";
 
-const APP_VERSION = "0.4.0";
+const APP_VERSION = "0.5.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
+const FOCUSED_SYNC_MS = 30 * 1000;
+const BLURRED_SYNC_MS = 180 * 1000;
+const SYNC_RETRY_DELAYS_MS = [5000, 30_000, 120_000];
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -131,14 +138,21 @@ function App() {
   const [setupError, setSetupError] = useState("");
   const [gitVersion, setGitVersion] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const syncInFlightRef = useRef(false);
   const autoSyncTimerRef = useRef<number | null>(null);
+  const syncRetryTimerRef = useRef<number | null>(null);
+  const syncRetryCountRef = useRef(0);
   const sessionsRef = useRef(sessions);
   const eventsRef = useRef(events);
   const setupStateRef = useRef(setupState);
   const syncSettingsRef = useRef(syncSettings);
   const setupInFlightRef = useRef(false);
   const setupCheckInFlightRef = useRef(false);
+  const autoConnectAttemptedRef = useRef(false);
+  const autoAddReposAttemptedRef = useRef(false);
+  const identityAutoFilledRef = useRef(false);
   const {
     repos,
     loading,
@@ -193,6 +207,115 @@ function App() {
       if (autoSyncTimerRef.current !== null) {
         window.clearTimeout(autoSyncTimerRef.current);
       }
+      if (syncRetryTimerRef.current !== null) {
+        window.clearTimeout(syncRetryTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-fill identity from OS on first launch.
+  useEffect(() => {
+    if (identityAutoFilledRef.current) return;
+    const current = setupStateRef.current.identity;
+    const needsUser = !current.userName.trim();
+    const needsDevice =
+      !current.deviceName.trim() ||
+      current.deviceName.trim() === "Axiom Device" ||
+      current.deviceName.trim().startsWith("Axiom ");
+    if (!needsUser && !needsDevice) {
+      identityAutoFilledRef.current = true;
+      return;
+    }
+    identityAutoFilledRef.current = true;
+    void (async () => {
+      try {
+        const detected = await getSystemIdentity();
+        const next: DeviceIdentity = {
+          ...current,
+          userName: needsUser && detected.userName
+            ? detected.userName
+            : current.userName,
+          deviceName: needsDevice && detected.hostName
+            ? detected.hostName
+            : current.deviceName,
+        };
+        if (
+          next.userName !== current.userName ||
+          next.deviceName !== current.deviceName
+        ) {
+          persistIdentity(next);
+        }
+      } catch {
+        // Fall back silently; user can still edit manually.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-connect when prerequisites are ready.
+  useEffect(() => {
+    if (setupState.setupComplete) return;
+    if (autoConnectAttemptedRef.current || setupInFlightRef.current) return;
+    if (setupBusy || setupChecking) return;
+    const identity = setupState.identity;
+    if (!identity.userName.trim() || !identity.deviceName.trim()) return;
+    const gitItem = checklist.find((item) => item.key === "git");
+    if (!gitItem || gitItem.status !== "complete") return;
+    autoConnectAttemptedRef.current = true;
+    void handleConnectWorkspace();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    setupState.setupComplete,
+    setupState.identity.userName,
+    setupState.identity.deviceName,
+    checklist,
+    setupBusy,
+    setupChecking,
+  ]);
+
+  // Auto-discover and add Axiom repos after first successful setup.
+  useEffect(() => {
+    if (!setupState.setupComplete) return;
+    if (autoAddReposAttemptedRef.current) return;
+    if (loadRepoPaths().length > 0) {
+      autoAddReposAttemptedRef.current = true;
+      return;
+    }
+    autoAddReposAttemptedRef.current = true;
+    void (async () => {
+      try {
+        const discovered = await discoverLocalRepos();
+        const filtered = filterDiscoverableRepos(discovered);
+        const recommended = filtered.filter(
+          (repo) => repo.confidenceScore >= 90 || Boolean(getRepoProfile(repo.name)),
+        );
+        for (const repo of recommended) {
+          try {
+            await addRepo(repo.path);
+          } catch {
+            // Skip any repo that fails to add; user can do it manually later.
+          }
+        }
+      } catch {
+        // Discovery may fail on locked-down machines; ignore silently.
+      }
+    })();
+  }, [setupState.setupComplete, addRepo]);
+
+  // Periodic update check (every 6 hours + on startup).
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      const result = await checkForUpdate(APP_VERSION);
+      if (!cancelled && result && result.available) {
+        setUpdateInfo(result);
+      }
+    }
+    void poll();
+    const timer = window.setInterval(() => void poll(), 6 * 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -234,23 +357,23 @@ function App() {
     if (!setupState.setupComplete || !syncSettings.autoSyncEnabled) {
       return;
     }
-    const intervalMs = Math.max(60, syncSettings.syncIntervalSeconds || 180) * 1000;
+    // Tick every 15s; pick threshold based on focus state.
     const timer = window.setInterval(() => {
+      if (syncInFlightRef.current) return;
+      const focused =
+        typeof document !== "undefined" ? document.hasFocus() : true;
+      const threshold = focused ? FOCUSED_SYNC_MS : BLURRED_SYNC_MS;
       const last = syncSettingsRef.current.lastSyncAt;
       const lastMs = last ? new Date(last).getTime() : 0;
-      if (
-        !syncInFlightRef.current &&
-        (!Number.isFinite(lastMs) || Date.now() - lastMs >= intervalMs)
-      ) {
+      if (!Number.isFinite(lastMs) || Date.now() - lastMs >= threshold) {
         void handleSyncNow(true);
       }
-    }, intervalMs);
+    }, 15_000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     setupState.setupComplete,
     syncSettings.autoSyncEnabled,
-    syncSettings.syncIntervalSeconds,
   ]);
 
   function updateChecklistItem(
@@ -671,18 +794,46 @@ function App() {
         gitCommandCount: result.gitCommandCount,
       });
       setSyncStatus("complete");
+      syncRetryCountRef.current = 0;
+      if (syncRetryTimerRef.current !== null) {
+        window.clearTimeout(syncRetryTimerRef.current);
+        syncRetryTimerRef.current = null;
+      }
     } catch (error) {
       const message = formatError(
         error,
         "Sync could not upload changes. Check internet and GitHub login.",
       );
-      persistSyncSettings({
-        ...syncSettingsRef.current,
-        lastSyncStatus: "Error",
-        lastSyncError: isAutomatic ? "Auto-sync failed. Click Sync Now." : message,
-        lastSyncCommandError: message,
-      });
-      setSyncStatus("error");
+      if (isAutomatic && syncRetryCountRef.current < SYNC_RETRY_DELAYS_MS.length) {
+        // Silent retry with backoff; keep last known sync status visible.
+        const delay = SYNC_RETRY_DELAYS_MS[syncRetryCountRef.current];
+        syncRetryCountRef.current += 1;
+        persistSyncSettings({
+          ...syncSettingsRef.current,
+          lastSyncCommandError: message,
+        });
+        setSyncStatus("idle");
+        if (syncRetryTimerRef.current !== null) {
+          window.clearTimeout(syncRetryTimerRef.current);
+        }
+        syncRetryTimerRef.current = window.setTimeout(() => {
+          syncRetryTimerRef.current = null;
+          if (!syncInFlightRef.current) {
+            void handleSyncNow(true);
+          }
+        }, delay);
+      } else {
+        syncRetryCountRef.current = 0;
+        persistSyncSettings({
+          ...syncSettingsRef.current,
+          lastSyncStatus: "Error",
+          lastSyncError: isAutomatic
+            ? "Sync paused. Axiom will retry next time the app is active."
+            : message,
+          lastSyncCommandError: message,
+        });
+        setSyncStatus("error");
+      }
     } finally {
       syncInFlightRef.current = false;
     }
@@ -776,6 +927,8 @@ function App() {
           syncStatus={syncStatus}
           onSyncNow={handleSyncNow}
           onDismissSuggestion={handleDismissSuggestion}
+          updateInfo={updateDismissed ? null : updateInfo}
+          onDismissUpdate={() => setUpdateDismissed(true)}
         />
       );
     }

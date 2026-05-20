@@ -22,6 +22,8 @@ import type {
   WorkSession,
   WorkspaceEvent,
 } from "../types";
+import type { UpdateCheckResult } from "../lib/sync";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { RepoDiscoveryModal } from "../components/RepoDiscoveryModal";
 import { StartSessionModal } from "../components/StartSessionModal";
 import { PageHeader } from "../components/PageHeader";
@@ -49,6 +51,8 @@ interface DashboardProps {
   syncStatus: SyncStatus;
   onSyncNow: () => Promise<void>;
   onDismissSuggestion: (id: string) => void;
+  updateInfo?: UpdateCheckResult | null;
+  onDismissUpdate?: () => void;
 }
 
 function timeAgo(value?: string): string {
@@ -162,6 +166,8 @@ export function Dashboard({
   syncStatus,
   onSyncNow,
   onDismissSuggestion,
+  updateInfo,
+  onDismissUpdate,
 }: DashboardProps) {
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
@@ -188,6 +194,29 @@ export function Dashboard({
       actionLabel?: string;
       action?: () => void;
     }[] = [];
+
+    const myName = defaultUserName.trim().toLowerCase();
+    const myActiveRepoIds = new Set(
+      activeSessions
+        .filter((s) => s.userName.trim().toLowerCase() === myName)
+        .map((s) => s.repoId),
+    );
+    const dirtyCandidate = repos.find(
+      (repo) =>
+        repo.hasUncommittedChanges &&
+        repo.status !== "error" &&
+        !myActiveRepoIds.has(repo.id),
+    );
+    if (dirtyCandidate) {
+      items.push({
+        id: `start-work-${dirtyCandidate.path}`,
+        title: `Working on ${dirtyCandidate.name}?`,
+        explanation: `${dirtyCandidate.changedFileCount} uncommitted change${dirtyCandidate.changedFileCount === 1 ? "" : "s"} detected. Claim an area so the team knows.`,
+        actionLabel: "Start Work",
+        action: () => setSessionRepo(dirtyCandidate),
+      });
+    }
+
     if (activeSessions.length > 0 && !syncSettings.lastSyncAt) {
       items.push({
         id: "active-unsynced",
@@ -197,8 +226,8 @@ export function Dashboard({
         action: () => void onSyncNow(),
       });
     }
-    return items.filter((item) => !dismissed.has(item.id)).slice(0, 2);
-  }, [activeSessions.length, onSyncNow, syncSettings.dismissedSuggestions, syncSettings.lastSyncAt]);
+    return items.filter((item) => !dismissed.has(item.id)).slice(0, 3);
+  }, [activeSessions, defaultUserName, onSyncNow, repos, syncSettings.dismissedSuggestions, syncSettings.lastSyncAt]);
 
   const topRecentEvents = useMemo(
     () =>
@@ -226,6 +255,36 @@ export function Dashboard({
       />
 
       <main className="p-8 space-y-6">
+        {updateInfo && updateInfo.available && (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text-primary">
+                Update available — {updateInfo.latestVersion}
+              </p>
+              <p className="mt-0.5 text-sm text-text-muted">
+                A newer Axiom Workspace is ready to install.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className={primaryBtnClass}
+                onClick={() => void openUrl(updateInfo.url)}
+              >
+                Download
+              </button>
+              {onDismissUpdate && (
+                <button
+                  className={iconBtnClass}
+                  title="Dismiss"
+                  onClick={onDismissUpdate}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
         {suggestions.length > 0 && (
           <section className="space-y-2">
             {suggestions.map((suggestion) => (

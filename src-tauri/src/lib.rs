@@ -1,6 +1,6 @@
 mod commands;
 
-use commands::{repos, sync};
+use commands::{repos, sync, system};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +18,7 @@ pub fn run() {
             sync::validate_sync_write_access,
             sync::ensure_sync_structure,
             sync::sync_now,
+            system::get_system_identity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
