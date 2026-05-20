@@ -1,7 +1,7 @@
 {
   "name": "axiom-workspace",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Axiom Workspace internal Windows coordination app",
   "author": "Axiom International",
   "type": "module",

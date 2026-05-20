@@ -330,7 +330,7 @@ function ClaimedAreasSection({ activeSessions }: { activeSessions: WorkSession[]
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
-          Claimed Areas
+          Files I'm Working On
         </h3>
         <span className="text-sm text-text-muted">
           {activeSessions.reduce((sum, s) => sum + s.targets.length, 0)} total
@@ -340,7 +340,7 @@ function ClaimedAreasSection({ activeSessions }: { activeSessions: WorkSession[]
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-text-muted">
-            No claimed areas. Areas show up here while work is active.
+            No files claimed yet. They show up here while work is active.
           </p>
         </div>
       ) : (

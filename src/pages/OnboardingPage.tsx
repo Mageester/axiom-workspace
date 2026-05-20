@@ -27,11 +27,11 @@ const fieldClass =
   "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent";
 
 const statusCopy: Record<SetupStatus, string> = {
-  complete: "Complete",
-  missing: "Missing",
-  needs_action: "Needs action",
-  error: "Error",
-  checking: "Checking",
+  complete: "Done",
+  missing: "Not found",
+  needs_action: "Action needed",
+  error: "Problem",
+  checking: "Checking...",
 };
 
 function StatusIcon({ status }: { status: SetupStatus }) {
@@ -88,8 +88,8 @@ export function OnboardingPage({
               Welcome to Axiom Workspace
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-text-secondary">
-              Axiom Workspace keeps Aidan and Riley coordinated across repos,
-              sessions, and soft locks.
+              See what your team is working on, pull the latest code, and
+              avoid stepping on each other's toes.
             </p>
             <div className="mt-6 flex max-w-xl items-start gap-3 rounded-lg border border-border bg-surface-1 p-4">
               <ShieldCheck
@@ -97,8 +97,7 @@ export function OnboardingPage({
                 className="mt-0.5 shrink-0 text-status-clean"
               />
               <p className="text-sm leading-6 text-text-secondary">
-                This syncs coordination state only. It does not sync your source
-                code.
+                Only work status is shared — your actual code stays on your machine.
               </p>
             </div>
           </div>

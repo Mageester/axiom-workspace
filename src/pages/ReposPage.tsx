@@ -15,12 +15,14 @@ interface ReposPageProps {
   activeSessions: WorkSession[];
   loading: boolean;
   refreshingPaths: Set<string>;
+  pullingPaths: Set<string>;
   onRefreshAll: () => Promise<void>;
   onRefreshRepo: (path: string) => Promise<void>;
   onAddRepo: (path: string) => Promise<LiveRepo>;
   onRemoveRepo: (path: string) => void;
   onRenameRepo: (path: string, name: string) => void;
   onStartSession: (input: CreateSessionInput) => void;
+  onPullRepo: (path: string) => Promise<void>;
   getRepoSessions: (repo: LiveRepo) => WorkSession[];
   defaultUserName: string;
 }
@@ -31,12 +33,14 @@ export function ReposPage({
   activeSessions,
   loading,
   refreshingPaths,
+  pullingPaths,
   onRefreshAll,
   onRefreshRepo,
   onAddRepo,
   onRemoveRepo,
   onRenameRepo,
   onStartSession,
+  onPullRepo,
   getRepoSessions,
   defaultUserName,
 }: ReposPageProps) {
@@ -111,11 +115,13 @@ export function ReposPage({
                 repo={repo}
                 nickname={repoNicknames[repo.path]}
                 refreshing={refreshingPaths.has(repo.path)}
+                pulling={pullingPaths.has(repo.path)}
                 activeSessions={getRepoSessions(repo)}
                 onRefresh={() => onRefreshRepo(repo.path)}
                 onRemove={() => onRemoveRepo(repo.path)}
                 onRename={(name) => onRenameRepo(repo.path, name)}
                 onStartSession={() => setSessionRepo(repo)}
+                onPull={() => onPullRepo(repo.path)}
               />
             ))}
           </div>

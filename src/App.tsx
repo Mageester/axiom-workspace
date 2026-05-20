@@ -57,9 +57,9 @@ import {
   validateSyncWriteAccess,
   type UpdateCheckResult,
 } from "./lib/sync";
-import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths } from "./lib/repos";
+import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.6.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
@@ -140,6 +140,7 @@ function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [pullingPaths, setPullingPaths] = useState<Set<string>>(new Set());
   const syncInFlightRef = useRef(false);
   const autoSyncTimerRef = useRef<number | null>(null);
   const syncRetryTimerRef = useRef<number | null>(null);
@@ -899,6 +900,43 @@ function App() {
     window.location.reload();
   }
 
+  async function handlePullRepo(path: string) {
+    setPullingPaths((prev) => new Set(prev).add(path));
+    try {
+      await invokePullRepo(path);
+      await refreshRepo(path);
+    } catch {
+      // Pull error is visible via repo status after refresh
+      await refreshRepo(path);
+    } finally {
+      setPullingPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+    }
+  }
+
+  async function handlePullAll() {
+    const behind = repos.filter((r) => r.behind > 0);
+    if (behind.length === 0) return;
+    for (const repo of behind) {
+      try {
+        setPullingPaths((prev) => new Set(prev).add(repo.path));
+        await invokePullRepo(repo.path);
+      } catch {
+        // Individual pull errors are non-fatal for pull-all
+      } finally {
+        setPullingPaths((prev) => {
+          const next = new Set(prev);
+          next.delete(repo.path);
+          return next;
+        });
+      }
+    }
+    await refreshAll();
+  }
+
   function getRepoSessions(repo: LiveRepo): WorkSession[] {
     return activeSessions.filter((session) => session.repoId === repo.id);
   }
@@ -927,6 +965,7 @@ function App() {
           syncStatus={syncStatus}
           onSyncNow={handleSyncNow}
           onDismissSuggestion={handleDismissSuggestion}
+          onPullAll={handlePullAll}
           updateInfo={updateDismissed ? null : updateInfo}
           onDismissUpdate={() => setUpdateDismissed(true)}
         />
@@ -950,12 +989,14 @@ function App() {
           activeSessions={activeSessions}
           loading={loading}
           refreshingPaths={refreshingPaths}
+          pullingPaths={pullingPaths}
           onRefreshAll={handleRefreshAll}
           onRefreshRepo={handleRefreshRepo}
           onAddRepo={addRepo}
           onRemoveRepo={removeRepo}
           onRenameRepo={handleRenameRepo}
           onStartSession={startSession}
+          onPullRepo={handlePullRepo}
           getRepoSessions={getRepoSessions}
           defaultUserName={setupState.identity.userName}
         />

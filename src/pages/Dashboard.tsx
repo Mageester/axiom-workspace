@@ -5,6 +5,7 @@ import {
   Briefcase,
   CheckCircle2,
   Clock,
+  Download,
   Loader2,
   Play,
   RefreshCw,
@@ -51,6 +52,7 @@ interface DashboardProps {
   syncStatus: SyncStatus;
   onSyncNow: () => Promise<void>;
   onDismissSuggestion: (id: string) => void;
+  onPullAll: () => Promise<void>;
   updateInfo?: UpdateCheckResult | null;
   onDismissUpdate?: () => void;
 }
@@ -166,6 +168,7 @@ export function Dashboard({
   syncStatus,
   onSyncNow,
   onDismissSuggestion,
+  onPullAll,
   updateInfo,
   onDismissUpdate,
 }: DashboardProps) {
@@ -211,7 +214,7 @@ export function Dashboard({
       items.push({
         id: `start-work-${dirtyCandidate.path}`,
         title: `Working on ${dirtyCandidate.name}?`,
-        explanation: `${dirtyCandidate.changedFileCount} uncommitted change${dirtyCandidate.changedFileCount === 1 ? "" : "s"} detected. Claim an area so the team knows.`,
+        explanation: `${dirtyCandidate.changedFileCount} unsaved change${dirtyCandidate.changedFileCount === 1 ? "" : "s"} found. Let the team know what you're working on.`,
         actionLabel: "Start Work",
         action: () => setSessionRepo(dirtyCandidate),
       });
@@ -477,29 +480,47 @@ export function Dashboard({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-wide text-text-muted">Clean</p>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5" title="Repos with no uncommitted changes and up to date with remote">
+                <p className="text-xs uppercase tracking-wide text-text-muted">All Good</p>
                 <p className="mt-1 text-lg font-semibold text-status-clean">{cleanRepos}</p>
               </div>
-              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-wide text-text-muted">Dirty</p>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5" title="Repos with local changes that haven't been committed">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Unsaved Changes</p>
                 <p className="mt-1 text-lg font-semibold text-status-dirty">{dirtyRepos}</p>
               </div>
-              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-wide text-text-muted">Behind</p>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5" title="Repos where the remote has newer commits you can pull">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Updates Available</p>
                 <p className="mt-1 text-lg font-semibold text-status-behind">{behindRepos}</p>
               </div>
-              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-wide text-text-muted">Errors</p>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5" title="Repos that had an error during the last check">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Needs Attention</p>
                 <p className="mt-1 text-lg font-semibold text-status-locked">{errorRepos}</p>
               </div>
+            </div>
+          )}
+          {repos.length > 0 && behindRepos > 0 && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-status-behind/30 bg-status-behind/10 px-3 py-2">
+              <div className="flex items-start gap-2 text-xs text-status-behind">
+                <Download size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  {behindRepos} repo{behindRepos === 1 ? " has" : "s have"} updates available.
+                </span>
+              </div>
+              <button
+                className={secondaryBtnClass}
+                onClick={() => void onPullAll()}
+                title="Pull the latest changes for all repos that are behind"
+              >
+                <Download size={14} />
+                Pull All
+              </button>
             </div>
           )}
           {repos.length > 0 && (dirtyRepos > 0 || errorRepos > 0) && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-status-dirty/30 bg-status-dirty/10 px-3 py-2 text-xs text-status-dirty">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               <span>
-                {dirtyRepos > 0 && `${dirtyRepos} repo${dirtyRepos === 1 ? "" : "s"} with uncommitted changes. `}
+                {dirtyRepos > 0 && `${dirtyRepos} repo${dirtyRepos === 1 ? "" : "s"} with unsaved changes. `}
                 {errorRepos > 0 && `${errorRepos} repo${errorRepos === 1 ? "" : "s"} need attention.`}
               </span>
             </div>
@@ -582,7 +603,7 @@ export function Dashboard({
           <div className="rounded-lg border border-dashed border-border p-6 text-center">
             <Timer size={20} className="mx-auto mb-2 text-text-muted" />
             <p className="text-sm text-text-primary">
-              Ready to work? Hit Start Work to claim an area.
+              Ready to start? Hit Start Work to let the team know what you're doing.
             </p>
           </div>
         )}

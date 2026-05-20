@@ -531,6 +531,119 @@ fn check_repo_status(path: &str) -> RepoStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullResult {
+    pub ok: bool,
+    pub message: String,
+    pub commits_pulled: u32,
+    pub had_stash: bool,
+    pub stash_conflict: bool,
+    pub duration_ms: u128,
+}
+
+fn pull_repo_inner(path: &str) -> PullResult {
+    let started = Instant::now();
+    let mut ctx = RepoCheckContext::new();
+
+    if ctx.git_command(path, &["rev-parse", "--is-inside-work-tree"]).is_err() {
+        return PullResult {
+            ok: false,
+            message: "Not a Git repository.".to_string(),
+            commits_pulled: 0,
+            had_stash: false,
+            stash_conflict: false,
+            duration_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    let has_changes = ctx
+        .git_command(path, &["status", "--porcelain=v1"])
+        .map(|out| !out.trim().is_empty())
+        .unwrap_or(false);
+
+    let had_stash = if has_changes {
+        ctx.git_command(path, &["stash", "push", "-m", "axiom-auto-stash"]).is_ok()
+    } else {
+        false
+    };
+
+    let before_hash = ctx
+        .git_command(path, &["rev-parse", "HEAD"])
+        .unwrap_or_default();
+
+    let pull_result = ctx.git_command(path, &["pull", "--ff-only"]);
+
+    if let Err(err) = pull_result {
+        if had_stash {
+            let _ = ctx.git_command(path, &["stash", "pop"]);
+        }
+        return PullResult {
+            ok: false,
+            message: if err.contains("divergent") || err.contains("not possible to fast-forward") {
+                "Can't fast-forward — branches have diverged. Pull manually to merge.".to_string()
+            } else if err.contains("no tracking information") || err.contains("no upstream") {
+                "No remote branch set up. Push this branch first.".to_string()
+            } else {
+                format!("Pull failed: {}", err)
+            },
+            commits_pulled: 0,
+            had_stash,
+            stash_conflict: false,
+            duration_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    let after_hash = ctx
+        .git_command(path, &["rev-parse", "HEAD"])
+        .unwrap_or_default();
+
+    let commits_pulled = if before_hash != after_hash {
+        ctx.git_command(path, &["rev-list", "--count", &format!("{}..{}", before_hash, after_hash)])
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(1)
+    } else {
+        0
+    };
+
+    let stash_conflict = if had_stash {
+        ctx.git_command(path, &["stash", "pop"]).is_err()
+    } else {
+        false
+    };
+
+    let message = if commits_pulled == 0 {
+        "Already up to date.".to_string()
+    } else if stash_conflict {
+        format!("Pulled {} new commit{}. Your local changes need manual merging (stash conflict).",
+            commits_pulled,
+            if commits_pulled == 1 { "" } else { "s" })
+    } else if had_stash {
+        format!("Pulled {} new commit{} and restored your local changes.",
+            commits_pulled,
+            if commits_pulled == 1 { "" } else { "s" })
+    } else {
+        format!("Pulled {} new commit{}.",
+            commits_pulled,
+            if commits_pulled == 1 { "" } else { "s" })
+    };
+
+    PullResult {
+        ok: true,
+        message,
+        commits_pulled,
+        had_stash,
+        stash_conflict,
+        duration_ms: started.elapsed().as_millis(),
+    }
+}
+
+#[tauri::command]
+pub fn pull_repo(path: String) -> PullResult {
+    pull_repo_inner(&path)
+}
+
 #[tauri::command]
 pub fn get_repo_status(path: String) -> RepoStatus {
     check_repo_status(&path)

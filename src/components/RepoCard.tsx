@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
   FileText,
   FolderOpen,
   GitBranch,
@@ -26,10 +27,12 @@ interface RepoCardProps {
   repo: LiveRepo;
   nickname?: string;
   refreshing: boolean;
+  pulling?: boolean;
   activeSessions: WorkSession[];
   onRefresh: () => void;
   onRemove: () => void;
   onStartSession: () => void;
+  onPull?: () => void;
   onRename?: (name: string) => void;
 }
 
@@ -83,10 +86,12 @@ export function RepoCard({
   repo,
   nickname,
   refreshing,
+  pulling,
   activeSessions,
   onRefresh,
   onRemove,
   onStartSession,
+  onPull,
   onRename,
 }: RepoCardProps) {
   const hasActiveSessions = activeSessions.length > 0;
@@ -111,13 +116,13 @@ export function RepoCard({
       }`;
     }
     if (repo.status === "error") {
-      return "Action needed";
+      return "Needs attention";
     }
     if (repo.behind > 0) {
-      return `${repo.behind} commit${repo.behind === 1 ? "" : "s"} behind`;
+      return `${repo.behind} update${repo.behind === 1 ? "" : "s"} available`;
     }
     if (repo.upstreamStatus === "missing") {
-      return "No upstream branch";
+      return "No remote branch";
     }
     return "Details";
   }, [hasDirtyFiles, repo]);
@@ -258,10 +263,10 @@ export function RepoCard({
             <FileText size={13} className="mt-0.5 shrink-0 text-status-dirty" />
             <div>
               <p className="text-sm font-medium text-status-dirty">
-                Local changes detected
+                You have unsaved changes
               </p>
               <p className="mt-0.5 text-xs leading-5 text-text-secondary">
-                This repo has local changes that are not committed.
+                {repo.changedFileCount} file{repo.changedFileCount === 1 ? "" : "s"} changed but not committed yet.
               </p>
             </div>
           </div>
@@ -297,9 +302,9 @@ export function RepoCard({
         </div>
         {repo.isGitRepo && (repo.ahead > 0 || repo.behind > 0) && (
           <span className="text-xs text-text-muted">
-            {repo.ahead > 0 && `ahead ${repo.ahead}`}
-            {repo.ahead > 0 && repo.behind > 0 && " "}
-            {repo.behind > 0 && `behind ${repo.behind}`}
+            {repo.ahead > 0 && `${repo.ahead} to push`}
+            {repo.ahead > 0 && repo.behind > 0 && " · "}
+            {repo.behind > 0 && `${repo.behind} to pull`}
           </span>
         )}
       </div>
@@ -329,7 +334,7 @@ export function RepoCard({
               {hasDirtyFiles && (
                 <div>
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-                    Dirty files
+                    Changed files
                   </p>
                   <div className="space-y-1.5">
                     {repo.changedFiles.map((file) => (
@@ -358,16 +363,34 @@ export function RepoCard({
               )}
 
               {repo.behind > 0 && (
-                <p className="rounded border border-status-behind/30 bg-status-behind/10 px-2 py-1.5 text-xs leading-5 text-status-behind">
-                  This branch is behind its upstream. Axiom only reports this;
-                  it will not pull project repos.
-                </p>
+                <div className="rounded border border-status-behind/30 bg-status-behind/10 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs leading-5 text-status-behind">
+                      {repo.behind} new commit{repo.behind === 1 ? "" : "s"} available from the remote.
+                    </p>
+                    {onPull && (
+                      <button
+                        className={`${secondaryBtnClass} shrink-0`}
+                        onClick={onPull}
+                        disabled={pulling}
+                        title="Download the latest changes from the remote"
+                      >
+                        {pulling ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Download size={12} />
+                        )}
+                        Pull Latest
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
 
               {repo.upstreamStatus === "missing" && (
                 <p className="rounded border border-border bg-surface-0 px-2 py-1.5 text-xs leading-5 text-text-muted">
-                  No upstream branch is configured for this repo. Local status
-                  checks still work.
+                  No remote branch set up yet. Push this branch first to enable
+                  update tracking.
                 </p>
               )}
 

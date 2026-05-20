@@ -48,11 +48,11 @@ const fieldClass =
   "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-70";
 
 const statusCopy: Record<SetupStatus, string> = {
-  complete: "Complete",
-  missing: "Missing",
-  needs_action: "Needs action",
-  error: "Error",
-  checking: "Checking",
+  complete: "Done",
+  missing: "Not found",
+  needs_action: "Action needed",
+  error: "Problem",
+  checking: "Checking...",
 };
 
 function formatDateTime(value?: string): string {
@@ -80,23 +80,23 @@ function formatDuration(value?: number): string {
 function syncStatusLabel(status: SyncStatus): string {
   switch (status) {
     case "checking":
-      return "Checking";
+      return "Checking...";
     case "writing_local_events":
-      return "Writing local events";
+      return "Saving your changes...";
     case "pulling_updates":
-      return "Pulling updates";
+      return "Getting team updates...";
     case "reading_shared_events":
-      return "Reading shared events";
+      return "Reading team activity...";
     case "merging":
-      return "Merging";
+      return "Combining updates...";
     case "pushing":
-      return "Pushing";
+      return "Sharing with team...";
     case "complete":
-      return "Complete";
+      return "Up to date";
     case "error":
-      return "Error";
+      return "Needs attention";
     default:
-      return "Idle";
+      return "Ready";
   }
 }
 

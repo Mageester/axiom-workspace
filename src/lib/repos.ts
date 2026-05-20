@@ -181,3 +181,16 @@ export async function getMultipleRepoStatuses(
 export async function discoverLocalRepos(): Promise<DiscoveredRepo[]> {
   return invoke<DiscoveredRepo[]>("discover_local_repos");
 }
+
+export interface PullResult {
+  ok: boolean;
+  message: string;
+  commitsPulled: number;
+  hadStash: boolean;
+  stashConflict: boolean;
+  durationMs: number;
+}
+
+export async function pullRepo(path: string): Promise<PullResult> {
+  return invoke<PullResult>("pull_repo", { path });
+}

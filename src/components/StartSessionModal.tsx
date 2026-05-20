@@ -160,7 +160,7 @@ export function StartSessionModal({
     const effectiveTargets =
       targets.length > 0 ? targets : [createLockTarget(targetType, targetValue)];
     if (effectiveTargets.length === 0 || !effectiveTargets.some((target) => target.value.trim())) {
-      nextErrors.targets = "Add at least one lock target.";
+      nextErrors.targets = "Add at least one file or area you're working on.";
     }
     return nextErrors;
   }
@@ -213,7 +213,7 @@ export function StartSessionModal({
               Start Work
             </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Claim an area so the team knows what is in motion.
+              Let the team know what you're working on.
             </p>
           </div>
           <button className={iconBtnClass} onClick={onClose} title="Close">
