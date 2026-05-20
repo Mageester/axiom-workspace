@@ -108,8 +108,8 @@ src-tauri/target/release/bundle/
 Expected 0.3.0 installer filenames:
 
 ```text
-src-tauri/target/release/bundle/nsis/Axiom Workspace_0.3.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Axiom Workspace_0.3.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Axiom Workspace_0.7.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_0.7.0_x64_en-US.msi
 ```
 
 ## Reset Local Data

@@ -1,13 +1,14 @@
 {
   "name": "axiom-workspace",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Axiom Workspace internal Windows coordination app",
   "author": "Axiom International",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -26,6 +27,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^3.2.4"
   }
 }

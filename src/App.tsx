@@ -17,6 +17,7 @@ import { ActivityPage } from "./pages/ActivityPage";
 import { ReposPage } from "./pages/ReposPage";
 import { useRepos } from "./hooks/useRepos";
 import { SessionsPage } from "./pages/SessionsPage";
+import { LocksPage } from "./pages/LocksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import {
@@ -59,7 +60,7 @@ import {
 } from "./lib/sync";
 import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.7.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
@@ -980,6 +981,9 @@ function App() {
           onUpdateNotes={handleUpdateSessionNotes}
         />
       );
+    }
+    if (activeNav === "locks") {
+      return <LocksPage activeSessions={activeSessions} />;
     }
     if (activeNav === "repos") {
       return (

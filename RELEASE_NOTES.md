@@ -1,8 +1,17 @@
-# Axiom Workspace v0.3.0 Beta
+# Axiom Workspace v0.7.0 Beta
 
 Status: internal beta for Aidan and Riley.
 
-## New in v0.3.0
+## New in v0.7.0
+
+- First-class Locks page for active soft locks by repository.
+- Stronger overlap warnings with severity labels for critical and high-risk claims.
+- Shared lock inventory layout across Work and Locks views.
+- Clearer sync health and release versioning for the current beta build.
+
+## Prior Beta Notes
+
+### v0.3.0
 
 - Automatic repo discovery across common Desktop, Documents, OneDrive, and Repos folders.
 - Known Axiom repo profiles with friendly names and descriptions.
@@ -27,15 +36,15 @@ Status: internal beta for Aidan and Riley.
 ## Installer Filenames
 
 ```text
-Axiom Workspace_0.3.0_x64-setup.exe
-Axiom Workspace_0.3.0_x64_en-US.msi
+Axiom Workspace_0.7.0_x64-setup.exe
+Axiom Workspace_0.7.0_x64_en-US.msi
 ```
 
 Expected local output paths:
 
 ```text
-src-tauri/target/release/bundle/nsis/Axiom Workspace_0.3.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Axiom Workspace_0.3.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Axiom Workspace_0.7.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_0.7.0_x64_en-US.msi
 ```
 
 ## Manual Beta Checklist

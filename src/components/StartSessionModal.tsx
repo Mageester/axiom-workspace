@@ -34,6 +34,28 @@ function formatTargetType(type: LockTarget["type"]): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
+function overlapSeverityLabel(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "Critical";
+    case "high":
+      return "High";
+    default:
+      return "Medium";
+  }
+}
+
+function overlapSeverityClass(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "border-status-locked/30 bg-status-locked/15 text-status-locked";
+    case "high":
+      return "border-status-dirty/30 bg-status-dirty/15 text-status-dirty";
+    default:
+      return "border-status-behind/30 bg-status-behind/15 text-status-behind";
+  }
+}
+
 export function StartSessionModal({
   open,
   repos,
@@ -442,13 +464,20 @@ export function StartSessionModal({
                   </p>
                   <div className="mt-2 space-y-1">
                     {overlaps.map((overlap, index) => (
-                      <p
+                      <div
                         key={`${overlap.sessionId}-${overlap.targetValue}-${index}`}
-                        className="text-sm text-text-secondary"
+                        className="flex flex-wrap items-start gap-2 text-sm text-text-secondary"
                       >
-                        {overlap.reason}: {overlap.targetValue} in{" "}
-                        {overlap.sessionTitle}
-                      </p>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${overlapSeverityClass(overlap.severity)}`}
+                        >
+                          {overlapSeverityLabel(overlap.severity)}
+                        </span>
+                        <span>
+                          {overlap.reason}: {overlap.targetValue} in{" "}
+                          {overlap.sessionTitle}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>

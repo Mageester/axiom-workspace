@@ -11,8 +11,11 @@ export type NavPage =
   | "dashboard"
   | "repos"
   | "sessions"
+  | "locks"
   | "activity"
   | "settings";
+
+export type SessionOverlapSeverity = "critical" | "high" | "medium";
 
 export interface LiveRepo {
   id: string;
@@ -96,6 +99,7 @@ export interface SessionOverlap {
   repoName: string;
   targetValue: string;
   reason: string;
+  severity: SessionOverlapSeverity;
 }
 
 export interface DeviceIdentity {

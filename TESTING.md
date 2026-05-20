@@ -4,7 +4,7 @@ Use this script for the first controlled Riley test pass. Please report anything
 
 ## Installer Test
 
-1. Install Axiom Workspace using `Axiom Workspace_0.1.0_x64-setup.exe`.
+1. Install Axiom Workspace using `Axiom Workspace_0.7.0_x64-setup.exe`.
 2. Open Axiom Workspace from the Start menu or desktop shortcut.
 3. Confirm the app opens without a crash.
 4. Confirm the first screen asks for setup instead of showing an error.

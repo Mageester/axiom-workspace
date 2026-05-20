@@ -1,4 +1,9 @@
-import type { LockTarget, SessionOverlap, WorkSession } from "../types";
+import type {
+  LockTarget,
+  SessionOverlap,
+  SessionOverlapSeverity,
+  WorkSession,
+} from "../types";
 
 const STORAGE_KEY = "axiom-workspace:sessions";
 
@@ -226,6 +231,31 @@ function getOverlapReason(incoming: LockTarget, active: LockTarget): string {
   return "Target overlaps an active lock";
 }
 
+function getOverlapSeverity(
+  incoming: LockTarget,
+  active: LockTarget,
+  incomingValue: string,
+  activeValue: string,
+): SessionOverlapSeverity {
+  if (incomingValue === activeValue) {
+    return "critical";
+  }
+
+  if (incoming.type === "area" || active.type === "area") {
+    return "high";
+  }
+
+  if (
+    (incoming.type === "file" && active.type === "folder") ||
+    (incoming.type === "folder" && active.type === "file") ||
+    (incoming.type === "folder" && active.type === "folder")
+  ) {
+    return "high";
+  }
+
+  return "medium";
+}
+
 function getAreaValues(target: LockTarget): string[] {
   return [target.value, target.label]
     .filter((value): value is string => Boolean(value?.trim()))
@@ -271,6 +301,12 @@ export function detectSessionOverlap(
             repoName: session.repoName,
             targetValue: activeTarget.label ?? activeTarget.value,
             reason: getOverlapReason(incomingTarget, activeTarget),
+            severity: getOverlapSeverity(
+              incomingTarget,
+              activeTarget,
+              incomingValue,
+              activeValue,
+            ),
           });
         }
       }

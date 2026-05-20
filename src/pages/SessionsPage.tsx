@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { SessionOverlap, WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
+import { LockInventory } from "../components/LockInventory";
 import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
 import { detectSessionOverlap, type CreateSessionInput } from "../lib/sessions";
 
@@ -46,6 +47,28 @@ function formatDateTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function overlapSeverityLabel(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "Critical";
+    case "high":
+      return "High";
+    default:
+      return "Medium";
+  }
+}
+
+function overlapSeverityClass(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "border-status-locked/30 bg-status-locked/15 text-status-locked";
+    case "high":
+      return "border-status-dirty/30 bg-status-dirty/15 text-status-dirty";
+    default:
+      return "border-status-behind/30 bg-status-behind/15 text-status-behind";
+  }
 }
 
 function getSessionOverlaps(
@@ -265,10 +288,19 @@ function ActiveWorkCard({
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <div className="space-y-1">
               {overlaps.map((overlap, index) => (
-                <p key={`${overlap.sessionId}-${index}`}>
-                  {overlap.reason}: {overlap.targetValue} overlaps{" "}
-                  {overlap.sessionTitle}
-                </p>
+                <div
+                  key={`${overlap.sessionId}-${index}`}
+                  className="flex flex-wrap items-start gap-2 text-sm text-text-secondary"
+                >
+                  <span
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${overlapSeverityClass(overlap.severity)}`}
+                  >
+                    {overlapSeverityLabel(overlap.severity)}
+                  </span>
+                  <span>
+                    {overlap.reason}: {overlap.targetValue} overlaps {overlap.sessionTitle}
+                  </span>
+                </div>
               ))}
             </div>
           </div>
@@ -313,73 +345,6 @@ function FinishedWorkCard({ session }: { session: WorkSession }) {
         <span>{formatDuration(session.startedAt, session.endedAt)}</span>
       </div>
     </article>
-  );
-}
-
-function ClaimedAreasSection({ activeSessions }: { activeSessions: WorkSession[] }) {
-  const sessionsByRepo = activeSessions.reduce<Record<string, WorkSession[]>>(
-    (acc, session) => {
-      acc[session.repoId] = [...(acc[session.repoId] ?? []), session];
-      return acc;
-    },
-    {},
-  );
-  const grouped = Object.values(sessionsByRepo);
-
-  return (
-    <section>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
-          Files I'm Working On
-        </h3>
-        <span className="text-sm text-text-muted">
-          {activeSessions.reduce((sum, s) => sum + s.targets.length, 0)} total
-        </span>
-      </div>
-
-      {grouped.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <p className="text-sm text-text-muted">
-            No files claimed yet. They show up here while work is active.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {grouped.map((sessions) => {
-            const repoName = sessions[0]?.repoName ?? "Unknown repo";
-            return (
-              <div key={sessions[0]?.repoId ?? repoName} className="overflow-hidden rounded-lg border border-border bg-surface-1">
-                <div className="border-b border-border bg-surface-2 px-4 py-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  {repoName}
-                </div>
-                {sessions.flatMap((session) =>
-                  session.targets.map((target) => (
-                    <div
-                      key={`${session.id}-${target.id}`}
-                      className="grid grid-cols-[100px_1fr_1fr_140px] gap-3 border-b border-border px-4 py-2.5 text-sm last:border-b-0"
-                    >
-                      <span className="inline-flex items-center gap-2 text-text-secondary">
-                        <Lock size={12} />
-                        {target.type}
-                      </span>
-                      <span className="truncate text-text-primary">
-                        {target.label ?? target.value}
-                      </span>
-                      <span className="truncate text-text-secondary">
-                        {session.title}
-                      </span>
-                      <span className="truncate text-text-muted">
-                        {session.userName}
-                      </span>
-                    </div>
-                  )),
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -428,7 +393,11 @@ export function SessionsPage({
           )}
         </section>
 
-        <ClaimedAreasSection activeSessions={activeSessions} />
+        <LockInventory
+          activeSessions={activeSessions}
+          title="Claimed areas"
+          emptyMessage="No files claimed yet. They show up here while work is active."
+        />
 
         <section>
           <div className="mb-4 flex items-center justify-between">
