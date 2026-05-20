@@ -9,6 +9,7 @@ export type RepoChangeKind =
 
 export type NavPage =
   | "dashboard"
+  | "board"
   | "repos"
   | "sessions"
   | "locks"
@@ -16,6 +17,16 @@ export type NavPage =
   | "settings";
 
 export type SessionOverlapSeverity = "critical" | "high" | "medium";
+export type BoardColumnId =
+  | "inbox"
+  | "ready"
+  | "in_progress"
+  | "blocked"
+  | "review"
+  | "done";
+export type BoardPriority = "low" | "medium" | "high" | "urgent";
+export type BoardAssignee = "you" | "agent" | "both" | "unassigned";
+export type WorkRiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface LiveRepo {
   id: string;
@@ -91,6 +102,40 @@ export interface WorkSession {
   status: SessionStatus;
   startedAt: string;
   endedAt?: string;
+}
+
+export interface BoardChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface WorkCard {
+  id: string;
+  title: string;
+  description?: string;
+  column: BoardColumnId;
+  priority: BoardPriority;
+  assignee: BoardAssignee;
+  repoId?: string;
+  repoName?: string;
+  repoPath?: string;
+  linkedSessionId?: string;
+  branch?: string;
+  paths: string[];
+  acceptanceCriteria: BoardChecklistItem[];
+  testPlan?: string;
+  agentBrief?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CardRiskAssessment {
+  level: WorkRiskLevel;
+  label: string;
+  reasons: string[];
 }
 
 export interface SessionOverlap {
@@ -169,6 +214,8 @@ export type WorkspaceEventType =
   | "session_created"
   | "session_ended"
   | "session_updated"
+  | "board_card_created"
+  | "board_card_updated"
   | "note_added"
   | "snapshot_created"
   | "sync_completed"
@@ -189,5 +236,6 @@ export interface SyncSnapshot {
   createdAt: string;
   createdByDeviceId: string;
   sessions: WorkSession[];
+  cards?: WorkCard[];
   eventsApplied: string[];
 }

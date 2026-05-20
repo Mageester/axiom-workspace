@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Briefcase,
   CheckCircle2,
+  ClipboardList,
   Clock,
   Download,
   Loader2,
@@ -20,6 +21,7 @@ import type {
   SetupState,
   SyncSettings,
   SyncStatus,
+  WorkCard,
   WorkSession,
   WorkspaceEvent,
 } from "../types";
@@ -30,10 +32,12 @@ import { StartSessionModal } from "../components/StartSessionModal";
 import { PageHeader } from "../components/PageHeader";
 import { iconBtnClass, secondaryBtnClass, primaryBtnClass } from "../lib/constants";
 import type { CreateSessionInput } from "../lib/sessions";
+import { assessCardRisk, getBoardStats } from "../lib/board";
 
 interface DashboardProps {
   repos: LiveRepo[];
   repoNicknames: Record<string, string>;
+  cards: WorkCard[];
   activeSessions: WorkSession[];
   recentEvents: WorkspaceEvent[];
   loading: boolean;
@@ -53,6 +57,7 @@ interface DashboardProps {
   onSyncNow: () => Promise<void>;
   onDismissSuggestion: (id: string) => void;
   onPullAll: () => Promise<void>;
+  onOpenBoard: () => void;
   updateInfo?: UpdateCheckResult | null;
   onDismissUpdate?: () => void;
 }
@@ -155,6 +160,7 @@ function buildTeamMembers(
 
 export function Dashboard({
   repos,
+  cards,
   activeSessions,
   recentEvents,
   loading,
@@ -169,6 +175,7 @@ export function Dashboard({
   onSyncNow,
   onDismissSuggestion,
   onPullAll,
+  onOpenBoard,
   updateInfo,
   onDismissUpdate,
 }: DashboardProps) {
@@ -182,6 +189,33 @@ export function Dashboard({
   const errorRepos = repos.filter((r) => r.status === "error").length;
   const syncing =
     syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
+  const boardStats = useMemo(() => getBoardStats(cards), [cards]);
+  const riskyCards = useMemo(
+    () =>
+      cards
+        .map((card) => ({ card, risk: assessCardRisk(card, repos, activeSessions) }))
+        .filter((item) => item.card.column !== "done" && item.risk.level !== "low")
+        .sort((a, b) => {
+          const order = { critical: 0, high: 1, medium: 2, low: 3 };
+          return order[a.risk.level] - order[b.risk.level];
+        })
+        .slice(0, 4),
+    [activeSessions, cards, repos],
+  );
+  const attentionRepos = useMemo(
+    () =>
+      repos
+        .filter((repo) => repo.status !== "clean" || repo.behind > 0 || repo.hasUncommittedChanges)
+        .sort((a, b) => {
+          const score = (repo: LiveRepo) =>
+            (repo.status === "error" ? 100 : 0) +
+            (repo.hasUncommittedChanges ? 50 : 0) +
+            repo.behind * 5;
+          return score(b) - score(a);
+        })
+        .slice(0, 4),
+    [repos],
+  );
 
   const teamMembers = useMemo(
     () => buildTeamMembers(defaultUserName, activeSessions, recentEvents),
@@ -321,6 +355,70 @@ export function Dashboard({
             ))}
           </section>
         )}
+
+        <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-lg border border-border bg-surface-1 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ClipboardList size={16} className="text-accent" />
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                  Work Board
+                </h3>
+              </div>
+              <button className={secondaryBtnClass} onClick={onOpenBoard}>
+                Open Board
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Cards</p>
+                <p className="mt-1 text-lg font-semibold text-text-primary">{cards.length}</p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Active</p>
+                <p className="mt-1 text-lg font-semibold text-status-behind">{boardStats.active}</p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Blocked</p>
+                <p className="mt-1 text-lg font-semibold text-status-locked">{boardStats.blocked}</p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Review</p>
+                <p className="mt-1 text-lg font-semibold text-status-dirty">{boardStats.review}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-1 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-status-dirty" />
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Needs Attention
+              </h3>
+            </div>
+            {riskyCards.length === 0 ? (
+              <p className="text-sm text-text-muted">No risky board cards right now.</p>
+            ) : (
+              <div className="space-y-2">
+                {riskyCards.map(({ card, risk }) => (
+                  <button
+                    key={card.id}
+                    className="w-full rounded-md border border-border bg-surface-0 px-3 py-2 text-left transition-colors hover:border-border-hover"
+                    onClick={onOpenBoard}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-medium text-text-primary">{card.title}</p>
+                      <span className="shrink-0 text-xs capitalize text-status-dirty">{risk.level}</span>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-text-muted">
+                      {risk.reasons[0] ?? "Review this card"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="rounded-lg border border-border bg-surface-1 p-5">
           <div className="mb-3 flex items-center gap-2">
@@ -523,6 +621,25 @@ export function Dashboard({
                 {dirtyRepos > 0 && `${dirtyRepos} repo${dirtyRepos === 1 ? "" : "s"} with unsaved changes. `}
                 {errorRepos > 0 && `${errorRepos} repo${errorRepos === 1 ? "" : "s"} need attention.`}
               </span>
+            </div>
+          )}
+          {attentionRepos.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {attentionRepos.map((repo) => (
+                <div key={repo.id} className="rounded-md border border-border bg-surface-0 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-medium text-text-primary">{repo.name}</p>
+                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted">
+                      {repo.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-text-muted">
+                    {repo.hasUncommittedChanges && `${repo.changedFileCount} changed file${repo.changedFileCount === 1 ? "" : "s"}. `}
+                    {repo.behind > 0 && `${repo.behind} update${repo.behind === 1 ? "" : "s"} available. `}
+                    {repo.errorMessage ?? ""}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
         </section>

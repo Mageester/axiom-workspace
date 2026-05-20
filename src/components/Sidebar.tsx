@@ -1,5 +1,6 @@
 import {
   Home,
+  ClipboardList,
   GitFork,
   Briefcase,
   Lock,
@@ -12,6 +13,7 @@ import axiomMark from "../../app-icon.png";
 
 const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
   { id: "dashboard", label: "Home", icon: <Home size={18} /> },
+  { id: "board", label: "Board", icon: <ClipboardList size={18} /> },
   { id: "repos", label: "Repos", icon: <GitFork size={18} /> },
   { id: "sessions", label: "Work", icon: <Briefcase size={18} /> },
   { id: "locks", label: "Locks", icon: <Lock size={18} /> },

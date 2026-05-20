@@ -14,6 +14,9 @@ interface StartSessionModalProps {
   repos: LiveRepo[];
   activeSessions: WorkSession[];
   initialRepo?: LiveRepo | null;
+  initialTitle?: string;
+  initialNotes?: string;
+  initialTargets?: LockTarget[];
   defaultUserName: string;
   onClose: () => void;
   onCreate: (input: CreateSessionInput) => void;
@@ -61,6 +64,9 @@ export function StartSessionModal({
   repos,
   activeSessions,
   initialRepo,
+  initialTitle,
+  initialNotes,
+  initialTargets,
   defaultUserName,
   onClose,
   onCreate,
@@ -116,16 +122,18 @@ export function StartSessionModal({
     }
 
     const repo = initialRepo ?? repos[0] ?? null;
-    const inferredTarget = inferTarget(repo, "");
+    const inferredTarget = inferTarget(repo, initialTitle ?? "");
     setRepoId(repo?.id ?? "");
     setBranch(repo?.currentBranch ?? "");
     setUserName(defaultUserName);
+    setTitle(initialTitle ?? "");
+    setNotes(initialNotes ?? "");
     setTargetType(inferredTarget.type);
-    setTargetValue(inferredTarget.value);
-    setTargets([inferredTarget]);
+    setTargetValue(initialTargets?.[0]?.value ?? inferredTarget.value);
+    setTargets(initialTargets && initialTargets.length > 0 ? initialTargets : [inferredTarget]);
     setAdvancedOpen(false);
-    setTargetTouched(false);
-  }, [defaultUserName, initialRepo, open, repos]);
+    setTargetTouched(Boolean(initialTargets?.length));
+  }, [defaultUserName, initialNotes, initialRepo, initialTargets, initialTitle, open, repos]);
 
   const selectedRepo = repos.find((repo) => repo.id === repoId) ?? null;
 

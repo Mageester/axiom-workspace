@@ -4,10 +4,12 @@ import type {
   SetupState,
   SyncSettings,
   SyncSnapshot,
+  WorkCard,
   WorkSession,
   WorkspaceEvent,
   WorkspaceEventType,
 } from "../types";
+import { isWorkCard, mergeCards } from "./board";
 
 const SETUP_KEY = "axiom-workspace:setup-state";
 const IDENTITY_KEY = "axiom-workspace:device-identity";
@@ -144,6 +146,8 @@ export function isWorkspaceEvent(value: unknown): value is WorkspaceEvent {
       "session_created",
       "session_ended",
       "session_updated",
+      "board_card_created",
+      "board_card_updated",
       "note_added",
       "snapshot_created",
       "sync_completed",
@@ -538,6 +542,7 @@ export function buildSnapshotFromSessions(
   sessions: WorkSession[],
   events: WorkspaceEvent[],
   identity: DeviceIdentity,
+  cards: WorkCard[] = [],
 ): SyncSnapshot {
   const cleanEvents = dedupeEvents(events);
   return {
@@ -545,6 +550,7 @@ export function buildSnapshotFromSessions(
     createdAt: safeNow(),
     createdByDeviceId: identity.deviceId,
     sessions: mergeSessions([], sessions),
+    cards: mergeCards([], cards.filter(isWorkCard)),
     eventsApplied: cleanEvents.map((event) => event.id),
   };
 }

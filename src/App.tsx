@@ -7,6 +7,7 @@ import type {
   SetupState,
   SyncSettings,
   SyncStatus,
+  WorkCard,
   WorkSession,
   WorkspaceEvent,
 } from "./types";
@@ -18,6 +19,7 @@ import { ReposPage } from "./pages/ReposPage";
 import { useRepos } from "./hooks/useRepos";
 import { SessionsPage } from "./pages/SessionsPage";
 import { LocksPage } from "./pages/LocksPage";
+import { BoardPage } from "./pages/BoardPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import {
@@ -30,6 +32,15 @@ import {
   updateSessionNotes,
   type CreateSessionInput,
 } from "./lib/sessions";
+import {
+  applyBoardEvents,
+  createWorkCard,
+  loadCards,
+  saveCards,
+  updateWorkCard,
+  type CreateWorkCardInput,
+  type WorkCardPatch,
+} from "./lib/board";
 import { loadRepoNicknames, setRepoNickname } from "./lib/repos";
 import {
   applyWorkspaceEvents,
@@ -119,6 +130,7 @@ function formatError(error: unknown, fallback: string): string {
 function App() {
   const [activeNav, setActiveNav] = useState<NavPage>("dashboard");
   const [sessions, setSessions] = useState<WorkSession[]>(() => loadSessions());
+  const [cards, setCards] = useState<WorkCard[]>(() => loadCards());
   const [events, setEvents] = useState<WorkspaceEvent[]>(() => loadEvents());
   const [setupState, setSetupState] = useState<SetupState>(() =>
     loadSetupState(),
@@ -147,6 +159,7 @@ function App() {
   const syncRetryTimerRef = useRef<number | null>(null);
   const syncRetryCountRef = useRef(0);
   const sessionsRef = useRef(sessions);
+  const cardsRef = useRef(cards);
   const eventsRef = useRef(events);
   const setupStateRef = useRef(setupState);
   const syncSettingsRef = useRef(syncSettings);
@@ -185,6 +198,10 @@ function App() {
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
 
   useEffect(() => {
     eventsRef.current = events;
@@ -609,7 +626,7 @@ function App() {
     }
   }
 
-  function startSession(input: CreateSessionInput) {
+  function startSession(input: CreateSessionInput): WorkSession {
     const session = createSession({
       ...input,
       userName: input.userName || setupState.identity.userName,
@@ -630,6 +647,65 @@ function App() {
       return next;
     });
     scheduleAutoSync();
+    return session;
+  }
+
+  function createCard(input: CreateWorkCardInput) {
+    const card = createWorkCard({
+      ...input,
+      createdBy: input.createdBy || setupState.identity.userName,
+    });
+    const event = createWorkspaceEvent(
+      "board_card_created",
+      { card },
+      setupState.identity,
+    );
+    setCards((prev) => {
+      const next = [card, ...prev];
+      saveCards(next);
+      return next;
+    });
+    setEvents((prev) => {
+      const next = dedupeEvents([...prev, event]);
+      saveEvents(next);
+      return next;
+    });
+    scheduleAutoSync();
+  }
+
+  function updateCard(cardId: string, patch: WorkCardPatch) {
+    setCards((prev) => {
+      const next = updateWorkCard(prev, cardId, patch);
+      saveCards(next);
+      const card = next.find((item) => item.id === cardId);
+      if (card) {
+        const event = createWorkspaceEvent(
+          "board_card_updated",
+          { card },
+          setupState.identity,
+        );
+        setEvents((eventPrev) => {
+          const eventNext = dedupeEvents([...eventPrev, event]);
+          saveEvents(eventNext);
+          return eventNext;
+        });
+      }
+      return next;
+    });
+    scheduleAutoSync();
+  }
+
+  function startSessionFromCard(cardId: string, input: CreateSessionInput) {
+    const session = startSession(input);
+    updateCard(cardId, {
+      column: "in_progress",
+      linkedSessionId: session.id,
+      repoId: session.repoId,
+      repoName: session.repoName,
+      repoPath: session.repoPath,
+      branch: session.branch,
+      paths: session.targets.map((target) => target.value),
+    });
   }
 
   function finishSession(sessionId: string, endNote?: string) {
@@ -741,6 +817,7 @@ function App() {
       const currentSetupState = setupStateRef.current;
       const currentSyncSettings = syncSettingsRef.current;
       const currentSessions = sessionsRef.current;
+      const currentCards = cardsRef.current;
       const currentEvents = eventsRef.current;
 
       if (!currentSetupState.setupComplete || !currentSyncSettings.syncLocalPath.trim()) {
@@ -767,6 +844,7 @@ function App() {
         currentSessions,
         currentEvents,
         currentSetupState.identity,
+        currentCards,
       );
       const result = await syncNow(
         currentSyncSettings.syncLocalPath,
@@ -778,8 +856,11 @@ function App() {
       setSyncStatus("merging");
       const mergedEvents = dedupeEvents([...currentEvents, ...result.events]);
       const mergedSessions = applyWorkspaceEvents(currentSessions, mergedEvents);
+      const mergedCards = applyBoardEvents(currentCards, mergedEvents);
       updateEvents(mergedEvents);
       updateSessions(mergedSessions);
+      setCards(mergedCards);
+      saveCards(mergedCards);
 
       const nextSettings: SyncSettings = {
         ...currentSyncSettings,
@@ -871,8 +952,10 @@ function App() {
 
   function handleResetSessionsAndLocks() {
     setSessions([]);
+    setCards([]);
     setEvents([]);
     saveSessions([]);
+    saveCards([]);
     saveEvents([]);
     setSyncStatus("idle");
     persistSyncSettings({
@@ -887,6 +970,7 @@ function App() {
     setSetupState(reset.setupState);
     setSyncSettings(reset.syncSettings);
     setEvents([]);
+    setCards([]);
     setChecklist(createChecklist(reset.setupState));
     setActiveNav("dashboard");
     setSetupMessage("");
@@ -897,6 +981,7 @@ function App() {
   function handleFullLocalReset() {
     clearAxiomLocalStorage();
     setSessions([]);
+    setCards([]);
     setEvents([]);
     window.location.reload();
   }
@@ -948,6 +1033,7 @@ function App() {
         <Dashboard
           repos={repos}
           repoNicknames={repoNicknames}
+          cards={cards}
           activeSessions={activeSessions}
           recentEvents={events}
           loading={loading}
@@ -967,6 +1053,7 @@ function App() {
           onSyncNow={handleSyncNow}
           onDismissSuggestion={handleDismissSuggestion}
           onPullAll={handlePullAll}
+          onOpenBoard={() => setActiveNav("board")}
           updateInfo={updateDismissed ? null : updateInfo}
           onDismissUpdate={() => setUpdateDismissed(true)}
         />
@@ -979,6 +1066,19 @@ function App() {
           recentEndedSessions={recentEndedSessions}
           onEndSession={finishSession}
           onUpdateNotes={handleUpdateSessionNotes}
+        />
+      );
+    }
+    if (activeNav === "board") {
+      return (
+        <BoardPage
+          cards={cards}
+          repos={repos}
+          activeSessions={activeSessions}
+          defaultUserName={setupState.identity.userName}
+          onCreateCard={createCard}
+          onUpdateCard={updateCard}
+          onStartSessionFromCard={startSessionFromCard}
         />
       );
     }
