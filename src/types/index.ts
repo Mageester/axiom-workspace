@@ -28,6 +28,27 @@ export type BoardPriority = "low" | "medium" | "high" | "urgent";
 export type BoardAssignee = "you" | "agent" | "both" | "unassigned";
 export type WorkRiskLevel = "low" | "medium" | "high" | "critical";
 
+export type RepoFileCategory =
+  | "source_code"
+  | "config"
+  | "deployment"
+  | "generated"
+  | "local_tooling"
+  | "screenshots"
+  | "docs"
+  | "unknown";
+
+export type RepoSafetyState =
+  | "safe"
+  | "dirty_low_risk"
+  | "dirty_needs_review"
+  | "ahead_of_remote"
+  | "behind_remote"
+  | "conflict_risk"
+  | "deployment_risk";
+
+export type RepoRiskLevel = "none" | "low" | "medium" | "high";
+
 export interface LiveRepo {
   id: string;
   name: string;
@@ -77,6 +98,22 @@ export interface RepoChangedFile {
   path: string;
   oldPath?: string | null;
   kind: RepoChangeKind;
+}
+
+export interface FileClassification {
+  path: string;
+  kind: RepoChangeKind;
+  category: RepoFileCategory;
+}
+
+export interface RepoIntelligence {
+  safetyState: RepoSafetyState;
+  riskLevel: RepoRiskLevel;
+  recommendation: string;
+  nextAction: string;
+  classifiedFiles: FileClassification[];
+  categoryCounts: Record<RepoFileCategory, number>;
+  isDirtyIntentional: boolean;
 }
 
 export type SessionStatus = "active" | "ended";

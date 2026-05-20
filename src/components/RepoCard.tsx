@@ -18,10 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { revealItemInDir, openPath } from "@tauri-apps/plugin-opener";
-import type { LiveRepo, RepoChangeKind, WorkSession } from "../types";
+import type { LiveRepo, RepoChangeKind, RepoFileCategory, WorkSession } from "../types";
 import { StatusBadge } from "./StatusBadge";
+import { RepoIntelligenceBadge, RiskLevelBadge } from "./RepoIntelligenceBadge";
 import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
 import { getRepoDescription, getRepoDisplayName } from "../lib/repos";
+import { analyzeRepo, categoryLabel } from "../lib/intelligence";
 
 interface RepoCardProps {
   repo: LiveRepo;
@@ -109,6 +111,22 @@ export function RepoCard({
     repo.upstreamStatus === "missing" ||
     repo.upstreamStatus === "error" ||
     repo.behind > 0;
+  const intelligence = useMemo(() => analyzeRepo(repo), [repo]);
+  const groupedFiles = useMemo(() => {
+    const groups = new Map<RepoFileCategory, typeof repo.changedFiles>();
+    for (const file of intelligence.classifiedFiles) {
+      const existing = groups.get(file.category) ?? [];
+      existing.push(file);
+      groups.set(file.category, existing);
+    }
+    const order: RepoFileCategory[] = [
+      "source_code", "config", "deployment", "generated",
+      "local_tooling", "screenshots", "docs", "unknown",
+    ];
+    return order
+      .filter((cat) => (groups.get(cat)?.length ?? 0) > 0)
+      .map((cat) => ({ category: cat, files: groups.get(cat)! }));
+  }, [intelligence]);
   const detailSummary = useMemo(() => {
     if (hasDirtyFiles) {
       return `${repo.changedFileCount} changed file${
@@ -214,6 +232,8 @@ export function RepoCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <StatusBadge status={repo.status} />
+          <RepoIntelligenceBadge safetyState={intelligence.safetyState} riskLevel={intelligence.riskLevel} />
+          <RiskLevelBadge riskLevel={intelligence.riskLevel} />
           <button
             onClick={() => void openFolder(repo.path)}
             className={iconBtnClass}
@@ -331,30 +351,47 @@ export function RepoCard({
 
           {detailsOpen && (
             <div className="mt-3 space-y-3">
-              {hasDirtyFiles && (
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-                    Changed files
+              {hasDirtyFiles && groupedFiles.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                    Changed files ({repo.changedFileCount})
                   </p>
-                  <div className="space-y-1.5">
-                    {repo.changedFiles.map((file) => (
-                      <div
-                        key={`${file.kind}-${file.oldPath || ""}-${file.path}`}
-                        className="flex items-start gap-2 rounded border border-border bg-surface-0 px-2 py-1.5"
-                      >
-                        <span className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
-                          {changeKindLabels[file.kind]}
+                  {groupedFiles.map(({ category, files }) => (
+                    <div key={category}>
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="text-xs font-medium text-text-secondary">
+                          {categoryLabel(category)}
                         </span>
-                        <span className="min-w-0 break-all font-mono text-xs text-text-secondary">
-                          {file.oldPath
-                            ? `${file.oldPath} -> ${file.path}`
-                            : file.path}
+                        <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-muted">
+                          {files.length}
                         </span>
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-1">
+                        {files.slice(0, 5).map((file) => (
+                          <div
+                            key={`${file.kind}-${file.path}`}
+                            className="flex items-start gap-2 rounded border border-border bg-surface-0 px-2 py-1.5"
+                          >
+                            <span className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
+                              {changeKindLabels[file.kind]}
+                            </span>
+                            <span className="min-w-0 break-all font-mono text-xs text-text-secondary">
+                              {file.oldPath
+                                ? `${file.oldPath} -> ${file.path}`
+                                : file.path}
+                            </span>
+                          </div>
+                        ))}
+                        {files.length > 5 && (
+                          <p className="text-[11px] text-text-muted">
+                            +{files.length - 5} more {categoryLabel(category).toLowerCase()} files
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                   {repo.hasMoreChangedFiles && (
-                    <p className="mt-2 text-xs text-text-muted">
+                    <p className="text-xs text-text-muted">
                       Showing first {repo.changedFiles.length} of{" "}
                       {repo.changedFileCount} changed files.
                     </p>
@@ -401,6 +438,19 @@ export function RepoCard({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {intelligence.riskLevel !== "none" && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-surface-0 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-text-primary">
+              {intelligence.nextAction}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-4 text-text-muted">
+              {intelligence.recommendation}
+            </p>
+          </div>
         </div>
       )}
 

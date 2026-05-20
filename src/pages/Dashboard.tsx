@@ -33,6 +33,7 @@ import { PageHeader } from "../components/PageHeader";
 import { iconBtnClass, secondaryBtnClass, primaryBtnClass } from "../lib/constants";
 import type { CreateSessionInput } from "../lib/sessions";
 import { assessCardRisk, getBoardStats } from "../lib/board";
+import { getSystemJudgment } from "../lib/intelligence";
 
 interface DashboardProps {
   repos: LiveRepo[];
@@ -216,6 +217,8 @@ export function Dashboard({
         .slice(0, 4),
     [repos],
   );
+
+  const systemJudgment = useMemo(() => getSystemJudgment(repos), [repos]);
 
   const teamMembers = useMemo(
     () => buildTeamMembers(defaultUserName, activeSessions, recentEvents),
@@ -417,6 +420,59 @@ export function Dashboard({
                 ))}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-lg border border-border bg-surface-1 p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-accent" />
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                System Judgment
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Safe</p>
+                <p className="mt-1 text-lg font-semibold text-status-clean">{systemJudgment.safeCount}</p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Needs Review</p>
+                <p className="mt-1 text-lg font-semibold text-status-dirty">{systemJudgment.needsReviewCount}</p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Highest Risk</p>
+                <p className="mt-1 truncate text-lg font-semibold text-status-locked" title={systemJudgment.highestRiskRepo?.name ?? "—"}>
+                  {systemJudgment.highestRiskRepo?.name ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-surface-0 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-wide text-text-muted">Action</p>
+                <p className="mt-1 truncate text-xs leading-5 font-medium text-status-behind">
+                  {systemJudgment.systemRecommendation}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface-1 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-status-dirty" />
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
+                Safety Breakdown
+              </h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(systemJudgment.breakdown).filter(([, count]) => count > 0).map(([state, count]) => (
+                <div key={state} className="flex items-center justify-between text-xs">
+                  <span className="text-text-secondary">{state.replace(/_/g, " ")}</span>
+                  <span className="rounded border border-border bg-surface-2 px-2 py-0.5 font-medium text-text-primary">{count}</span>
+                </div>
+              ))}
+              {Object.values(systemJudgment.breakdown).every((c) => c === 0) && (
+                <p className="text-xs text-text-muted">No repos tracked.</p>
+              )}
+            </div>
           </div>
         </section>
 
