@@ -280,21 +280,32 @@ export function Dashboard({
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
+        eyebrow="Command center"
         title="Home"
-        description="Team status and active work."
+        description="Who is working on what, what is claimed, and whether it is safe to start."
         actions={
-          <button
-            className={primaryBtnClass}
-            onClick={() => setStartModalOpen(true)}
-            disabled={repos.length === 0}
-          >
-            <Play size={14} />
-            Start Work
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className={secondaryBtnClass}
+              onClick={() => void onSyncNow()}
+              disabled={syncing || !setupState.setupComplete}
+            >
+              {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Sync
+            </button>
+            <button
+              className={primaryBtnClass}
+              onClick={() => setStartModalOpen(true)}
+              disabled={repos.length === 0}
+            >
+              <Play size={14} />
+              Start Work
+            </button>
+          </div>
         }
       />
 
-      <main className="p-8 space-y-6">
+      <main className="space-y-6 p-8">
         {updateInfo && updateInfo.available && (
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3">
             <div className="min-w-0">
@@ -325,18 +336,50 @@ export function Dashboard({
           </section>
         )}
 
+        <section className="rounded-2xl border border-border/80 bg-gradient-to-br from-surface-1/95 via-surface-1/72 to-surface-0/70 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.22)]">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-hover">
+                Safe-to-start summary
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-text-primary md:text-5xl">
+                {activeSessions.length === 0
+                  ? "No active work is blocking the team."
+                  : `${activeSessions.length} active work item${activeSessions.length === 1 ? "" : "s"} in motion.`}
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-text-secondary">
+                Start Work before editing a repo area. Finish Work when you are done so Aidan and Riley can trust the current state.
+              </p>
+            </div>
+            <div className="grid min-w-[360px] grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border/70 bg-surface-0/70 px-4 py-3">
+                <p className="text-xs text-text-muted">Safe repos</p>
+                <p className="mt-1 text-2xl font-semibold text-status-clean">{systemJudgment.safeCount}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-surface-0/70 px-4 py-3">
+                <p className="text-xs text-text-muted">Review</p>
+                <p className="mt-1 text-2xl font-semibold text-status-dirty">{systemJudgment.needsReviewCount}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-surface-0/70 px-4 py-3">
+                <p className="text-xs text-text-muted">Working</p>
+                <p className="mt-1 text-2xl font-semibold text-accent-hover">{activeSessions.length}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {suggestions.length > 0 && (
           <section className="space-y-2">
             {suggestions.map((suggestion) => (
               <div
                 key={suggestion.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface-1 px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-status-dirty/25 bg-status-dirty/10 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-text-primary">
+                  <p className="text-sm font-semibold text-text-primary">
                     {suggestion.title}
                   </p>
-                  <p className="mt-0.5 text-sm text-text-muted">
+                  <p className="mt-0.5 text-sm text-text-secondary">
                     {suggestion.explanation}
                   </p>
                 </div>

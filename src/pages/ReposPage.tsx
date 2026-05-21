@@ -47,12 +47,17 @@ export function ReposPage({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [sessionRepo, setSessionRepo] = useState<LiveRepo | null>(null);
+  const cleanCount = repos.filter((repo) => repo.status === "clean").length;
+  const changedCount = repos.filter((repo) => repo.hasUncommittedChanges).length;
+  const updateCount = repos.filter((repo) => repo.behind > 0).length;
+  const attentionCount = repos.filter((repo) => repo.status === "error" || repo.upstreamStatus === "error").length;
 
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
+        eyebrow="Read-only repo status"
         title="Repositories"
-        description="All tracked project repositories. Axiom only reads repo status — it never writes to your project repos."
+        description="Track project health without syncing source code. Axiom reads status and keeps coordination separate."
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -85,16 +90,37 @@ export function ReposPage({
         }
       />
 
-      <main className="p-8">
+      <main className="space-y-6 p-8">
+        {repos.length > 0 && (
+          <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div className="rounded-xl border border-border/80 bg-surface-1/70 px-4 py-3">
+              <p className="text-xs text-text-muted">Tracked</p>
+              <p className="mt-1 text-2xl font-semibold text-text-primary">{repos.length}</p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-surface-1/70 px-4 py-3">
+              <p className="text-xs text-text-muted">All good</p>
+              <p className="mt-1 text-2xl font-semibold text-status-clean">{cleanCount}</p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-surface-1/70 px-4 py-3">
+              <p className="text-xs text-text-muted">Local changes</p>
+              <p className="mt-1 text-2xl font-semibold text-status-dirty">{changedCount}</p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-surface-1/70 px-4 py-3">
+              <p className="text-xs text-text-muted">Review</p>
+              <p className="mt-1 text-2xl font-semibold text-status-behind">{attentionCount + updateCount}</p>
+            </div>
+          </section>
+        )}
+
         {loading && repos.length === 0 ? (
-          <div className="flex items-center justify-center h-64 rounded-lg border border-dashed border-border">
+          <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-border/80 bg-surface-1/40">
             <div className="flex items-center gap-2 text-sm text-text-muted">
               <Loader2 size={16} className="animate-spin" />
               Loading repositories...
             </div>
           </div>
         ) : repos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 rounded-lg border border-dashed border-border">
+          <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-surface-1/40">
             <p className="text-sm text-text-muted mb-2">No repositories tracked yet.</p>
             <p className="text-xs text-text-muted mb-4 max-w-md text-center">
               Add your project repos so Axiom can track their status. This is read-only — Axiom never runs git write commands on your projects.
@@ -108,7 +134,7 @@ export function ReposPage({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {repos.map((repo) => (
               <RepoCard
                 key={repo.path}

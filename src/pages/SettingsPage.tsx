@@ -19,7 +19,7 @@ import type {
   RepoDiagnostics,
 } from "../types";
 import { PageHeader } from "../components/PageHeader";
-import { primaryBtnClass, secondaryBtnClass } from "../lib/constants";
+import { fieldClass, labelClass, primaryBtnClass, secondaryBtnClass } from "../lib/constants";
 
 interface SettingsPageProps {
   setupState: SetupState;
@@ -43,9 +43,6 @@ interface SettingsPageProps {
   onFullLocalReset: () => void;
   onResetDismissedSuggestions: () => void;
 }
-
-const fieldClass =
-  "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-70";
 
 const statusCopy: Record<SetupStatus, string> = {
   complete: "Done",
@@ -218,12 +215,13 @@ export function SettingsPage({
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
+        eyebrow="Local-first control"
         title="Settings"
-        description="Identity, team sync, and setup health."
+        description="Identity, Git-based team sync, setup health, and advanced local reset controls."
       />
 
       <main className="space-y-6 p-8">
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <div className="mb-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Identity
@@ -235,7 +233,7 @@ export function SettingsPage({
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 User display name
               </span>
               <input
@@ -252,7 +250,7 @@ export function SettingsPage({
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Device name
               </span>
               <input
@@ -269,7 +267,7 @@ export function SettingsPage({
             </label>
 
             <label className="block lg:col-span-2">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Device ID
               </span>
               <input
@@ -288,7 +286,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
@@ -340,13 +338,13 @@ export function SettingsPage({
 
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Sync repo URL
               </span>
               <input className={fieldClass} value={settings.syncRepoUrl} readOnly />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Local sync folder
               </span>
               <input
@@ -407,7 +405,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <div className="mb-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Automation
@@ -517,7 +515,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <div className="mb-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Diagnostics
@@ -544,7 +542,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <div className="mb-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Setup Checklist
@@ -576,7 +574,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-surface-1 p-5">
+        <section className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
           <button
             className="flex w-full items-center justify-between text-left"
             onClick={() => setAdvancedOpen((open) => !open)}
@@ -599,7 +597,7 @@ export function SettingsPage({
           {advancedOpen && (
             <div className="mt-5 space-y-5">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                <span className={labelClass}>
                   Sync repo URL override
                 </span>
                 <input
@@ -609,7 +607,7 @@ export function SettingsPage({
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                <span className={labelClass}>
                   Local sync path override
                 </span>
                 <input

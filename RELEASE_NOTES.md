@@ -1,61 +1,71 @@
-# Axiom Workspace v0.7.0 Beta
+# Axiom Workspace v1.0.0
 
-Status: internal beta for Aidan and Riley.
+Status: private internal release for Aidan and Riley.
 
-## New in v0.7.0
+## New in v1.0.0
 
-- First-class Locks page for active soft locks by repository.
-- Stronger overlap warnings with severity labels for critical and high-risk claims.
-- Shared lock inventory layout across Work and Locks views.
-- Clearer sync health and release versioning for the current beta build.
+- Premium desktop shell with a simplified Home / Work / Repos / Activity / Settings navigation model.
+- Home command center focused on active work, team claims, sync health, repo attention, and safe next actions.
+- Cleaner Start Work flow for claiming a repo area before work begins.
+- Simpler Finish Work flow with optional change summary and handoff note.
+- Polished Work, Repos, Activity, and Settings pages using the 1.0 visual system.
+- Clearer no-upstream handling: missing remote branches are shown as setup/review state, not fatal app errors.
+- Standalone private web companion scaffold in `web/` for `workspace.getaxiom.ca`.
+- Web portal docs require Cloudflare Access before deployment.
 
-## Prior Beta Notes
+## Private Web Companion
 
-### v0.3.0
+`workspace.getaxiom.ca` is a static/private companion portal for:
 
-- Automatic repo discovery across common Desktop, Documents, OneDrive, and Repos folders.
-- Known Axiom repo profiles with friendly names and descriptions.
-- Discover Repos flow with add selected, add all recommended, and ignore controls.
-- Safer auto-refresh on startup, app focus, and a quiet two-minute minimum interval.
-- Debounced auto-sync after session starts, endings, note edits, and handoff notes.
-- One-click Start Work flow with repo, branch, user, and target suggestions.
-- Lightweight dashboard suggestions for dirty repos, stale sync, generated screenshots, teammate locks, and unsynced sessions.
-- First-run flow opens repo discovery after sync setup completes.
-- Settings for auto-refresh, auto-sync, discovery paths, refresh interval, suggestion reset, and advanced sync.
+- desktop app downloads
+- Riley setup instructions
+- release notes
+- privacy/safety explanation
+- future deep-link documentation
+
+It is not a hosted backend. It does not read the private sync repo, expose workspace state, store secrets, or replace the desktop app.
+
+Recommended deployment status: block public deployment until Cloudflare Access allows only Aidan and Riley.
 
 ## Safety Guarantees
 
 - Project repos remain read-only: Axiom only runs Git status and metadata commands there.
-- Only the validated sync repo receives Git write commands.
+- Only the validated sync repo receives Git write commands for coordination state.
 - Source code, project files, credentials, passwords, and tokens are not synced.
-- No paid APIs, hosted databases, analytics, Supabase, Firebase, or SaaS were added.
-- Auto-refresh prevents overlapping refreshes and uses a two-minute minimum timer.
+- No paid APIs, hosted databases, SQL migrations, Prisma, Supabase, Firebase, or SaaS backend were added.
+- Web portal is static and must be protected before deployment.
+- Auto-refresh prevents overlapping refreshes and uses a minimum timer.
 - Auto-sync is debounced, prevents overlap, and keeps Manual Sync Now available.
-- Repo discovery scans only known local folders to depth three and skips heavy folders.
 
 ## Installer Filenames
 
 ```text
-Axiom Workspace_0.7.0_x64-setup.exe
-Axiom Workspace_0.7.0_x64_en-US.msi
+Axiom Workspace_1.0.0_x64-setup.exe
+Axiom Workspace_1.0.0_x64_en-US.msi
 ```
 
-Expected local output paths:
+Expected local output paths after `npm run tauri build`:
 
 ```text
-src-tauri/target/release/bundle/nsis/Axiom Workspace_0.7.0_x64-setup.exe
-src-tauri/target/release/bundle/msi/Axiom Workspace_0.7.0_x64_en-US.msi
+src-tauri/target/release/bundle/nsis/Axiom Workspace_1.0.0_x64-setup.exe
+src-tauri/target/release/bundle/msi/Axiom Workspace_1.0.0_x64_en-US.msi
 ```
 
-## Manual Beta Checklist
+## Manual Release Checklist
 
 - Fresh setup.
+- Git installed / GitHub access validated.
+- Connect to Axiom Team Workspace sync repo.
 - Repo discovery.
 - Add recommended repos.
 - Auto-refresh on startup and focus.
 - Dirty repo suggestion.
-- One-click Start Work.
+- No-upstream branch shown as review/setup state, not fatal error.
+- Start Work claim.
+- Finish Work handoff.
 - Auto-sync after session start and session end.
 - Manual Sync Now.
 - No terminal windows.
-- Responsive dashboard and repo pages.
+- Responsive Home, Work, Repos, Activity, and Settings pages.
+- Web portal build passes.
+- Do not deploy `workspace.getaxiom.ca` without access protection.

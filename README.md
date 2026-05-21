@@ -48,6 +48,28 @@ The sync repo stores coordination state only. Project repositories remain normal
 - First-run setup for name, device, Git checks, and sync connection.
 - Windows installer output from Tauri.
 
+## Private Web Companion
+
+A standalone private portal scaffold lives in `web/` for `workspace.getaxiom.ca`.
+
+The portal is a static companion for desktop downloads, setup instructions, release links, safety notes, and future desktop deep-link documentation. It is not a backend for the Tauri app and does not read the private sync repo.
+
+Privacy requirement:
+
+- Protect `workspace.getaxiom.ca` with Cloudflare Access before deploying.
+- Allow only Aidan and Riley.
+- Do not deploy publicly without an access gate.
+- Do not add client-side secrets, hosted databases, Next.js routes, SQL migrations, or source-code sync.
+
+Portal build:
+
+```bash
+cd web
+npm run build
+```
+
+See `web/DEPLOY.md` for deployment instructions.
+
 ## Developer Setup
 
 Prerequisites:

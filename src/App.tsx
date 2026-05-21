@@ -1166,6 +1166,8 @@ function App() {
         onNavigate={setActiveNav}
         setupComplete={setupState.setupComplete}
         activeSessionCount={activeSessions.length}
+        syncStatus={syncStatus}
+        syncSettings={syncSettings}
       />
       <RepoDiscoveryModal
         open={showDiscoveryModal}

@@ -134,13 +134,14 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
+        eyebrow="Audit trail"
         title="Activity"
-        description="Recent events, syncs, and repo refreshes."
+        description="A calm timeline of work sessions, syncs, repo refreshes, and issues that need attention."
       />
 
       <main className="space-y-6 p-8">
         <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
             <div className="flex items-center gap-2 mb-3">
               <Upload size={14} className={lastSyncFailed ? "text-status-locked" : lastSyncOk ? "text-status-clean" : "text-text-muted"} />
               <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">Last Sync</h3>
@@ -163,7 +164,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
             )}
           </div>
 
-          <div className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
             <div className="flex items-center gap-2 mb-3">
               <GitBranch size={14} className="text-text-muted" />
               <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">Last Repo Refresh</h3>
@@ -184,7 +185,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
             )}
           </div>
 
-          <div className="rounded-lg border border-border bg-surface-1 p-5">
+          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
             <div className="flex items-center gap-2 mb-3">
               {(syncSettings.lastSyncError || repoDiagnostics.lastCommandError) ? (
                 <AlertCircle size={14} className="text-status-locked" />
@@ -207,14 +208,14 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
             <span className="text-sm text-text-muted">{filteredEvents.length} events</span>
           </div>
 
-          <div className="mb-4 flex items-center gap-1">
+          <div className="mb-4 flex items-center gap-1 rounded-xl border border-border/70 bg-surface-1/50 p-1">
             {(Object.keys(FILTER_LABELS) as ActivityFilter[]).map((key) => (
               <button
                 key={key}
                 className={`rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
                   filter === key
-                    ? "bg-accent text-white"
-                    : "bg-surface-2 text-text-secondary hover:bg-surface-3 hover:text-text-primary"
+                    ? "bg-accent text-white shadow-[0_10px_30px_rgba(47,111,237,0.22)]"
+                    : "text-text-secondary hover:bg-surface-3 hover:text-text-primary"
                 }`}
                 onClick={() => setFilter(key)}
               >
@@ -224,7 +225,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
           </div>
 
           {filteredEvents.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-10 text-center">
+            <div className="rounded-2xl border border-dashed border-border/80 bg-surface-1/40 p-10 text-center">
               <p className="text-sm text-text-muted">
                 {filter === "all"
                   ? "No events yet. Start work or run Sync Now to create the first event."
@@ -232,7 +233,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
               </p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border bg-surface-1 overflow-hidden">
+            <div className="rounded-xl border border-border/80 bg-surface-1/70 overflow-hidden">
               {filteredEvents.map((event, index) => (
                 <div
                   key={event.id}

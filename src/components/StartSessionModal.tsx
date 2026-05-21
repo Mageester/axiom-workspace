@@ -6,7 +6,7 @@ import {
   detectSessionOverlap,
   type CreateSessionInput,
 } from "../lib/sessions";
-import { primaryBtnClass, secondaryBtnClass, iconBtnClass } from "../lib/constants";
+import { fieldClass, iconBtnClass, labelClass, primaryBtnClass, secondaryBtnClass } from "../lib/constants";
 import { getRepoDisplayName } from "../lib/repos";
 
 interface StartSessionModalProps {
@@ -29,9 +29,6 @@ interface FormErrors {
   targetValue?: string;
   targets?: string;
 }
-
-const fieldClass =
-  "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent";
 
 function formatTargetType(type: LockTarget["type"]): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -235,15 +232,18 @@ export function StartSessionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-lg border border-border bg-surface-1 shadow-2xl">
-        <div className="flex items-start justify-between border-b border-border px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border/90 bg-surface-1 shadow-[0_28px_100px_rgba(0,0,0,0.45)]">
+        <div className="flex items-start justify-between border-b border-border/80 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-text-primary">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-hover">
+              Claim work
+            </p>
+            <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em] text-text-primary">
               Start Work
             </h2>
-            <p className="mt-1 text-sm text-text-muted">
-              Let the team know what you're working on.
+            <p className="mt-1 text-sm text-text-secondary">
+              Tell Aidan and Riley what repo area you are about to touch.
             </p>
           </div>
           <button className={iconBtnClass} onClick={onClose} title="Close">
@@ -254,7 +254,7 @@ export function StartSessionModal({
         <div className="space-y-5 px-5 py-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="block md:col-span-2">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Repo
               </span>
               <select
@@ -287,7 +287,7 @@ export function StartSessionModal({
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 What are you working on?
               </span>
               <input
@@ -302,7 +302,7 @@ export function StartSessionModal({
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              <span className={labelClass}>
                 Area or file
               </span>
               <input
@@ -316,13 +316,13 @@ export function StartSessionModal({
                 placeholder="src/components or dashboard cards"
               />
               <p className="mt-1 text-xs text-text-muted">
-                {formatTargetType(targets[0]?.type ?? targetType)}
+                Claim type: {formatTargetType(targets[0]?.type ?? targetType)}
               </p>
             </label>
           </div>
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+            <span className={labelClass}>
               Optional note
             </span>
             <textarea
@@ -333,7 +333,7 @@ export function StartSessionModal({
             />
           </label>
 
-          <div className="rounded-lg border border-border bg-surface-0 p-4">
+          <div className="rounded-xl border border-border/80 bg-surface-0/70 p-4">
             <button
               className="flex w-full items-center justify-between text-left"
               onClick={() => setAdvancedOpen((open) => !open)}
@@ -343,7 +343,7 @@ export function StartSessionModal({
                   Advanced
                 </p>
                 <p className="mt-0.5 text-xs text-text-muted">
-                  Change user, branch, area type, or add more areas.
+                    Change user, branch, claim type, or add more claimed areas.
                 </p>
               </div>
               {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -353,7 +353,7 @@ export function StartSessionModal({
               <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                    <span className={labelClass}>
                       User
                     </span>
                     <input
@@ -370,7 +370,7 @@ export function StartSessionModal({
                   </label>
 
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-muted">
+                    <span className={labelClass}>
                       Branch
                     </span>
                     <input
@@ -387,8 +387,10 @@ export function StartSessionModal({
                     className={fieldClass}
                     value={targetType}
                     onChange={(event) => {
-                    setTargetType(event.target.value as LockTarget["type"]);
-                    setTargetTouched(true);
+                      const nextType = event.target.value as LockTarget["type"];
+                      setTargetType(nextType);
+                      setTargets([createLockTarget(nextType, targetValue)]);
+                      setTargetTouched(true);
                     }}
                   >
                     <option value="area">Area</option>
@@ -460,7 +462,7 @@ export function StartSessionModal({
           </div>
 
           {overlaps.length > 0 && (
-            <div className="rounded-lg border border-status-dirty/40 bg-status-dirty/10 p-4">
+            <div className="rounded-xl border border-status-dirty/40 bg-status-dirty/10 p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle
                   size={18}
@@ -468,7 +470,10 @@ export function StartSessionModal({
                 />
                 <div>
                   <p className="text-sm font-medium text-status-dirty">
-                    Overlap warning
+                    This overlaps active work
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">
+                    Review this before starting. Axiom will not block you, but the team should know if two people touch the same area.
                   </p>
                   <div className="mt-2 space-y-1">
                     {overlaps.map((overlap, index) => (

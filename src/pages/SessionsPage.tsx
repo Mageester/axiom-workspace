@@ -13,7 +13,7 @@ import {
 import type { SessionOverlap, WorkSession } from "../types";
 import { PageHeader } from "../components/PageHeader";
 import { LockInventory } from "../components/LockInventory";
-import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
+import { fieldClass, iconBtnClass, labelClass, primaryBtnClass, secondaryBtnClass } from "../lib/constants";
 import { detectSessionOverlap, type CreateSessionInput } from "../lib/sessions";
 
 function formatDuration(startedAt: string, endedAt?: string): string {
@@ -139,7 +139,7 @@ function ActiveWorkCard({
   }
 
   return (
-    <article className="rounded-lg border border-border bg-surface-1 p-5">
+    <article className="rounded-xl border border-border/80 bg-surface-1/80 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
@@ -162,16 +162,21 @@ function ActiveWorkCard({
       </div>
 
       {finishing && (
-        <div className="mt-4 rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
-          <p className="text-sm font-medium text-text-primary">
-            Finish &ldquo;{session.title}&rdquo;? This releases claimed areas and syncs.
-          </p>
+        <div className="mt-4 space-y-3 rounded-xl border border-accent/30 bg-accent/10 p-4">
+          <div>
+            <p className="text-sm font-semibold text-text-primary">
+              Finish &ldquo;{session.title}&rdquo;
+            </p>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">
+              Releases claimed areas and queues a sync so the team sees that this work is done.
+            </p>
+          </div>
           <label className="block">
-            <span className="block text-xs font-medium uppercase tracking-wide text-text-muted">
+            <span className={labelClass}>
               What changed?
             </span>
             <textarea
-              className="mt-1 w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+              className={`${fieldClass} mt-1 min-h-16 resize-none`}
               rows={2}
               placeholder="Optional — summary of what you did"
               value={changedNote}
@@ -179,23 +184,23 @@ function ActiveWorkCard({
             />
           </label>
           <label className="block">
-            <span className="block text-xs font-medium uppercase tracking-wide text-text-muted">
-              Anything the team should know?
+            <span className={labelClass}>
+              Handoff note
             </span>
             <textarea
-              className="mt-1 w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none resize-none"
+              className={`${fieldClass} mt-1 min-h-16 resize-none`}
               rows={2}
-              placeholder="Optional handoff note"
+              placeholder="Optional — anything Aidan or Riley should know next"
               value={handoffNote}
               onChange={(e) => setHandoffNote(e.target.value)}
             />
           </label>
           <div className="flex items-center gap-2">
             <button
-              className={`${secondaryBtnClass} !bg-accent/10 !text-accent !border-accent/30 hover:!bg-accent/20`}
+              className={primaryBtnClass}
               onClick={confirmFinish}
             >
-              Finish and Sync
+              Finish Work
             </button>
             <button
               className={secondaryBtnClass}
