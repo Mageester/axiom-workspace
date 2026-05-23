@@ -3,6 +3,8 @@ import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { emitTo } from "@tauri-apps/api/event";
+import { resolveResource } from "@tauri-apps/api/path";
+import { Image } from "@tauri-apps/api/image";
 import type { TrayNotification, TrayWidgetState } from "../types";
 
 export interface TrayCallbacks {
@@ -20,26 +22,48 @@ export async function createWidgetWindow(): Promise<WebviewWindow> {
     return existing;
   }
 
-  const primary = getCurrentWindow();
-  const factor = await primary.scaleFactor();
-  const screen = await primary.outerSize();
+  // Position bottom-right of primary monitor using available screen area
+  const width = 380;
+  const height = 540;
+  let x = 100;
+  let y = 100;
 
-  const width = 370;
-  const height = 520;
-  const x = Math.round((screen.width / factor) - width - 16);
-  const y = Math.round((screen.height / factor) - height - 60);
+  try {
+    const { availableMonitors, primaryMonitor } = await import("@tauri-apps/api/window");
+    const primary = await primaryMonitor();
+    if (primary) {
+      const screenW = primary.size.width / primary.scaleFactor;
+      const screenH = primary.size.height / primary.scaleFactor;
+      x = Math.max(0, Math.round(screenW - width - 16));
+      y = Math.max(0, Math.round(screenH - height - 60));
+    } else {
+      // Fallback: try first available monitor
+      const monitors = await availableMonitors();
+      if (monitors.length > 0) {
+        const mon = monitors[0];
+        const screenW = mon.size.width / mon.scaleFactor;
+        const screenH = mon.size.height / mon.scaleFactor;
+        x = Math.max(0, Math.round(screenW - width - 16));
+        y = Math.max(0, Math.round(screenH - height - 60));
+      }
+    }
+  } catch {
+    // Fallback to reasonable defaults if monitor API fails
+    x = 1200;
+    y = 400;
+  }
 
   const win = new WebviewWindow("tray-widget", {
     url: "index.html",
     width,
     height,
-    x: Math.max(0, x),
-    y: Math.max(0, y),
+    x,
+    y,
     decorations: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: false,
+    resizable: true,
     focus: false,
     visible: true,
     title: "Axiom Widget",
@@ -59,6 +83,7 @@ export async function initTray(callbacks: TrayCallbacks): Promise<TrayIcon> {
       await widgetWindow.hide();
     } else {
       await widgetWindow.show();
+      await widgetWindow.setFocus();
     }
   };
 
@@ -92,17 +117,38 @@ export async function initTray(callbacks: TrayCallbacks): Promise<TrayIcon> {
     items: [showHide, syncNow, openApp, separator, quit],
   });
 
-  trayInstance = await TrayIcon.new({
+  // Load tray icon
+  let trayIconImage: Image | undefined;
+  try {
+    const iconPath = await resolveResource("icons/32x32.png");
+    trayIconImage = await Image.fromPath(iconPath);
+  } catch {
+    // If icon load fails, try alternative path
+    try {
+      const iconPath = await resolveResource("icons/icon.png");
+      trayIconImage = await Image.fromPath(iconPath);
+    } catch {
+      // Tray will show without custom icon
+    }
+  }
+
+  const trayOptions: Parameters<typeof TrayIcon.new>[0] = {
     id: "axiom-tray",
     menu,
     tooltip: "Axiom Workspace",
-    showMenuOnLeftClick: false,
+    menuOnLeftClick: false,
     action: (event) => {
       if (event.type === "Click" && event.button === "Left" && event.buttonState === "Up") {
         void toggleWidget();
       }
     },
-  });
+  };
+
+  if (trayIconImage) {
+    trayOptions.icon = trayIconImage;
+  }
+
+  trayInstance = await TrayIcon.new(trayOptions);
 
   return trayInstance;
 }

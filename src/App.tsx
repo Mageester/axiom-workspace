@@ -80,7 +80,7 @@ import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMain
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;

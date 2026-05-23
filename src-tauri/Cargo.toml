@@ -1,6 +1,6 @@
 [package]
 name = "axiom-workspace"
-version = "1.1.0"
+version = "1.2.0"
 description = "Axiom Workspace internal desktop tool"
 authors = ["Axiom International"]
 edition = "2021"
