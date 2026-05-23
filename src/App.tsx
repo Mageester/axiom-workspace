@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DeviceIdentity,
-  LiveRepo,
   NavPage,
   SetupChecklistItem,
   SetupState,
@@ -27,10 +26,8 @@ import {
   createSession,
   endSession,
   getActiveSessions,
-  getRecentEndedSessions,
   loadSessions,
   saveSessions,
-  updateSessionNotes,
   type CreateSessionInput,
 } from "./lib/sessions";
 import {
@@ -73,10 +70,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 
 const APP_VERSION = "1.3.0";
-const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
-const SYNC_RETRY_DELAYS_MS = [5000, 30_000, 120_000];
 
 function createChecklist(state: SetupState): SetupChecklistItem[] {
   const identityReady =
@@ -198,7 +193,6 @@ function App() {
   });
 
   const activeSessions = useMemo(() => getActiveSessions(sessions), [sessions]);
-  const recentEndedSessions = useMemo(() => getRecentEndedSessions(sessions), [sessions]);
 
   // Tray widget state
   const trayRepoSummaries = useMemo((): TrayRepoSummary[] =>
@@ -526,18 +520,6 @@ function App() {
     });
   }
 
-  function handleUpdateSessionNotes(sessionId: string, notes: string) {
-    setSessions(prev => {
-      const next = updateSessionNotes(prev, sessionId, notes);
-      saveSessions(next);
-      const session = next.find(item => item.id === sessionId);
-      const event = createWorkspaceEvent("session_updated", session ? { session } : { sessionId, notes }, setupState.identity);
-      setEvents(eventPrev => { const eventNext = dedupeEvents([...eventPrev, event]); saveEvents(eventNext); return eventNext; });
-      return next;
-    });
-    scheduleAutoSync();
-  }
-
   function scheduleAutoSync() {
     if (!setupStateRef.current.setupComplete || !syncSettingsRef.current.autoSyncEnabled || !syncSettingsRef.current.syncLocalPath.trim()) return;
     if (autoSyncTimerRef.current !== null) window.clearTimeout(autoSyncTimerRef.current);
@@ -583,6 +565,11 @@ function App() {
     try { await invokePullRepo(path); await refreshRepo(path); } catch { await refreshRepo(path); } finally {
       setPullingPaths(prev => { const next = new Set(prev); next.delete(path); return next; });
     }
+  }
+
+  function handleFullLocalReset() {
+    clearAxiomLocalStorage();
+    window.location.reload();
   }
 
   function renderPage() {

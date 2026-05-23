@@ -22,6 +22,40 @@ import type { LiveRepo, WorkSession } from "../types";
 import { getRepoDisplayName } from "../lib/repos";
 import { analyzeRepo } from "../lib/intelligence";
 
+async function openFolder(path: string) {
+  try {
+    await revealItemInDir(path);
+  } catch {
+    try {
+      await openPath(path);
+    } catch {}
+  }
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {}
+}
+
+function formatLastChecked(value: string): string {
+  const numeric = Number(value);
+  const date = Number.isFinite(numeric)
+    ? new Date(numeric * 1000)
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not checked yet";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 interface RepoCardProps {
   repo: LiveRepo;
   nickname?: string;
@@ -34,14 +68,6 @@ interface RepoCardProps {
   onPull?: () => void;
   onRename?: (name: string) => void;
 }
-
-const changeKindLabels: Record<RepoChangeKind, string> = {
-  added: "Added",
-  deleted: "Deleted",
-  modified: "Modified",
-  renamed: "Renamed",
-  untracked: "Untracked",
-};
 
 function getHumanStatus(repo: LiveRepo): string {
   if (repo.status === "error") return "Needs attention";
