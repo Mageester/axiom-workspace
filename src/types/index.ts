@@ -268,6 +268,52 @@ export interface WorkspaceEvent {
   version: 1;
 }
 
+export interface TrayWidgetState {
+  activeSessions: WorkSession[];
+  repos: TrayRepoSummary[];
+  recentEvents: TrayEventSummary[];
+  boardSummary: TrayBoardSummary;
+  syncStatus: SyncStatus;
+  lastSyncAt?: string;
+  currentUser: string;
+}
+
+export interface TrayRepoSummary {
+  name: string;
+  status: RepoStatus;
+  branch: string;
+  changedFileCount: number;
+  behind: number;
+  hasLockConflict: boolean;
+}
+
+export interface TrayEventSummary {
+  id: string;
+  type: WorkspaceEventType;
+  userName: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface TrayBoardSummary {
+  inbox: number;
+  ready: number;
+  in_progress: number;
+  blocked: number;
+  review: number;
+  done: number;
+  assignedToYou: number;
+}
+
+export interface TrayNotification {
+  id: string;
+  type: "session_started" | "session_ended" | "sync_complete" | "lock_conflict";
+  title: string;
+  message: string;
+  userName: string;
+  timestamp: string;
+}
+
 export interface SyncSnapshot {
   version: 1;
   createdAt: string;

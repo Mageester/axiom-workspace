@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  BoardColumnId,
   DeviceIdentity,
   LiveRepo,
   NavPage,
@@ -7,12 +8,18 @@ import type {
   SetupState,
   SyncSettings,
   SyncStatus,
+  TrayBoardSummary,
+  TrayEventSummary,
+  TrayNotification,
+  TrayRepoSummary,
+  TrayWidgetState,
   WorkCard,
   WorkSession,
   WorkspaceEvent,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { RepoDiscoveryModal } from "./components/RepoDiscoveryModal";
+import { TrayWidget } from "./components/TrayWidget";
 import { Dashboard } from "./pages/Dashboard";
 import { ActivityPage } from "./pages/ActivityPage";
 import { ReposPage } from "./pages/ReposPage";
@@ -71,7 +78,9 @@ import {
 } from "./lib/sync";
 import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 
-const APP_VERSION = "0.8.0";
+import { initTray, updateTrayTooltip, destroyTray, openMainWindow } from "./lib/tray";
+
+const APP_VERSION = "1.1.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
@@ -127,6 +136,36 @@ function formatError(error: unknown, fallback: string): string {
   return typeof error === "string" && error ? error : fallback;
 }
 
+function formatEventDescription(event: WorkspaceEvent): string {
+  const payload = event.payload as Record<string, unknown>;
+  switch (event.type) {
+    case "session_created": {
+      const s = payload.session as { repoName?: string } | undefined;
+      return `Started session on ${s?.repoName || "unknown repo"}`;
+    }
+    case "session_ended": {
+      const note = payload.endNote as string | undefined;
+      return note ? `Ended session — ${note}` : "Ended session";
+    }
+    case "board_card_created": {
+      const c = payload.card as { title?: string } | undefined;
+      return `Created card: ${c?.title || "untitled"}`;
+    }
+    case "board_card_updated": {
+      const c = payload.card as { title?: string } | undefined;
+      return `Updated card: ${c?.title || "untitled"}`;
+    }
+    case "sync_completed":
+      return "Sync completed";
+    case "repo_refreshed": {
+      const path = payload.repoPath as string | undefined;
+      return path === "all" ? "Refreshed all repos" : `Refreshed ${path || "repo"}`;
+    }
+    default:
+      return event.type.replace(/_/g, " ");
+  }
+}
+
 function App() {
   const [activeNav, setActiveNav] = useState<NavPage>("dashboard");
   const [sessions, setSessions] = useState<WorkSession[]>(() => loadSessions());
@@ -154,6 +193,11 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [pullingPaths, setPullingPaths] = useState<Set<string>>(new Set());
+  const [widgetVisible, setWidgetVisible] = useState(true);
+  const [widgetExpanded, setWidgetExpanded] = useState(true);
+  const [trayNotifications, setTrayNotifications] = useState<TrayNotification[]>([]);
+  const trayInitializedRef = useRef(false);
+  const prevSessionIdsRef = useRef<Set<string>>(new Set());
   const syncInFlightRef = useRef(false);
   const autoSyncTimerRef = useRef<number | null>(null);
   const syncRetryTimerRef = useRef<number | null>(null);
@@ -190,6 +234,142 @@ function App() {
     () => getRecentEndedSessions(sessions),
     [sessions],
   );
+
+  // Tray widget state — split into independent memos to avoid cross-triggering
+  const trayRepoSummaries = useMemo((): TrayRepoSummary[] =>
+    repos.map((r) => ({
+      name: r.name,
+      status: r.status,
+      branch: r.currentBranch,
+      changedFileCount: r.changedFileCount,
+      behind: r.behind,
+      hasLockConflict: activeSessions.some(
+        (s) => s.repoId === r.id && s.userName !== setupState.identity.userName,
+      ),
+    })),
+  [repos, activeSessions, setupState.identity.userName]);
+
+  const trayBoardSummary = useMemo((): TrayBoardSummary => {
+    const columnCounts: Record<BoardColumnId, number> = {
+      inbox: 0, ready: 0, in_progress: 0, blocked: 0, review: 0, done: 0,
+    };
+    let assignedToYou = 0;
+    for (const card of cards) {
+      columnCounts[card.column] = (columnCounts[card.column] || 0) + 1;
+      if (card.assignee === "you" || card.createdBy === setupState.identity.userName) {
+        assignedToYou++;
+      }
+    }
+    return { ...columnCounts, assignedToYou };
+  }, [cards, setupState.identity.userName]);
+
+  const trayRecentEvents = useMemo((): TrayEventSummary[] =>
+    events
+      .slice(-30)
+      .reverse()
+      .map((e) => ({
+        id: e.id,
+        type: e.type,
+        userName: e.userName,
+        description: formatEventDescription(e),
+        createdAt: e.createdAt,
+      })),
+  [events]);
+
+  const trayWidgetState = useMemo((): TrayWidgetState => ({
+    activeSessions,
+    repos: trayRepoSummaries,
+    recentEvents: trayRecentEvents,
+    boardSummary: trayBoardSummary,
+    syncStatus,
+    lastSyncAt: syncSettings.lastSyncAt,
+    currentUser: setupState.identity.userName,
+  }), [activeSessions, trayRepoSummaries, trayRecentEvents, trayBoardSummary, syncStatus, syncSettings.lastSyncAt, setupState.identity.userName]);
+
+  const dismissNotification = useCallback((id: string) => {
+    setTrayNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const notificationsInitializedRef = useRef(false);
+
+  // Session change detection for notifications
+  useEffect(() => {
+    const currentIds = new Set(activeSessions.map((s) => s.id));
+    const prevIds = prevSessionIdsRef.current;
+
+    if (!notificationsInitializedRef.current) {
+      notificationsInitializedRef.current = true;
+      prevSessionIdsRef.current = currentIds;
+      return;
+    }
+
+    for (const s of activeSessions) {
+      if (!prevIds.has(s.id) && s.userName !== setupState.identity.userName) {
+        const notification: TrayNotification = {
+          id: `notif-${s.id}-started`,
+          type: "session_started",
+          title: `${s.userName} started working`,
+          message: `${s.repoName}${s.branch ? ` (${s.branch})` : ""}`,
+          userName: s.userName,
+          timestamp: new Date().toISOString(),
+        };
+        setTrayNotifications((prev) => [...prev, notification]);
+      }
+    }
+
+    for (const id of prevIds) {
+      if (!currentIds.has(id)) {
+        const ended = sessions.find((s) => s.id === id);
+        if (ended && ended.userName !== setupState.identity.userName) {
+          const notification: TrayNotification = {
+            id: `notif-${id}-ended`,
+            type: "session_ended",
+            title: `${ended.userName} finished working`,
+            message: `${ended.repoName}${ended.endNote ? ` — ${ended.endNote}` : ""}`,
+            userName: ended.userName,
+            timestamp: new Date().toISOString(),
+          };
+          setTrayNotifications((prev) => [...prev, notification]);
+        }
+      }
+    }
+
+    prevSessionIdsRef.current = currentIds;
+  }, [activeSessions, sessions, setupState.identity.userName]);
+
+  // Initialize tray icon
+  useEffect(() => {
+    if (!setupState.setupComplete || trayInitializedRef.current) return;
+    trayInitializedRef.current = true;
+
+    const trayPromise = initTray({
+      onToggleWidget: () => setWidgetVisible((v) => !v),
+      onSyncNow: () => void handleSyncNow(false),
+      onOpenMainWindow: openMainWindow,
+      onQuit: async () => {
+        await destroyTray();
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const win = getCurrentWindow();
+        await win.destroy();
+      },
+    });
+
+    return () => {
+      void trayPromise.then(() => destroyTray());
+      trayInitializedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupState.setupComplete]);
+
+  // Update tray tooltip with session info
+  useEffect(() => {
+    if (!trayInitializedRef.current) return;
+    const count = activeSessions.length;
+    const tooltip = count > 0
+      ? `Axiom — ${count} active session${count !== 1 ? "s" : ""}`
+      : "Axiom Workspace";
+    void updateTrayTooltip(tooltip);
+  }, [activeSessions.length]);
 
   useEffect(() => {
     setChecklist(createChecklist(setupState));
@@ -1175,6 +1355,19 @@ function App() {
         onAddRepo={addRepo}
       />
       {renderPage()}
+      {widgetVisible && (
+        <TrayWidget
+          state={trayWidgetState}
+          notifications={trayNotifications}
+          expanded={widgetExpanded}
+          isSyncing={syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error"}
+          onToggleExpand={() => setWidgetExpanded((v) => !v)}
+          onClose={() => setWidgetVisible(false)}
+          onSyncNow={() => void handleSyncNow(false)}
+          onOpenMainWindow={openMainWindow}
+          onDismissNotification={dismissNotification}
+        />
+      )}
     </div>
   );
 }
