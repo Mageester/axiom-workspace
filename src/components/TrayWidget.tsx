@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   TrayWidgetState,
   TrayNotification,
@@ -36,7 +36,6 @@ import {
   Bell,
 } from "lucide-react";
 
-const WIDGET_STORAGE_KEY = "axiom-tray-widget-position";
 const NOTIFICATION_DURATION_MS = 5000;
 
 function eventIcon(type: string) {
@@ -191,18 +190,6 @@ export function TrayWidget({
   onOpenMainWindow,
   onDismissNotification,
 }: TrayWidgetProps) {
-  const dragRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-  const posRef = useRef({ x: 0, y: 0 });
-  const [pos, setPos] = useState(() => {
-    try {
-      const saved = localStorage.getItem(WIDGET_STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as { x: number; y: number };
-    } catch { /* use default */ }
-    return { x: window.innerWidth - 380, y: window.innerHeight - 500 };
-  });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -210,32 +197,10 @@ export function TrayWidget({
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    posRef.current = pos;
-  }, [pos]);
-
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
+  const onDragStart = useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
-    isDragging.current = true;
-    dragStart.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    e.preventDefault();
-  }, []);
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging.current) return;
-    const x = Math.max(0, Math.min(e.clientX - dragStart.current.x, window.innerWidth - 360));
-    const y = Math.max(0, Math.min(e.clientY - dragStart.current.y, window.innerHeight - 100));
-    setPos({ x, y });
-  }, []);
-
-  const onPointerUp = useCallback(() => {
-    if (isDragging.current) {
-      isDragging.current = false;
-      try {
-        localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(posRef.current));
-      } catch { /* ignore */ }
-    }
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().startDragging();
   }, []);
 
   void tick;
@@ -245,11 +210,7 @@ export function TrayWidget({
   const mySessions = activeSessions.filter((s) => s.userName === state.currentUser);
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed z-[9999] select-none"
-      style={{ left: pos.x, top: pos.y }}
-    >
+    <div className="select-none">
       {/* Notification toasts stack above widget */}
       <div className="mb-2">
         {notifications.map((n) => (
@@ -263,14 +224,11 @@ export function TrayWidget({
       </div>
 
       {/* Widget card */}
-      <div className="w-[356px] rounded-2xl border border-border/60 bg-surface-0/85 shadow-[0_24px_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl overflow-hidden">
-        {/* Drag header */}
+      <div className="w-[356px] rounded-2xl border border-border/60 bg-surface-0/95 shadow-[0_24px_80px_rgba(0,0,0,0.5)] overflow-hidden">
+        {/* Drag header — uses Tauri's native window drag */}
         <div
-          ref={dragRef}
-          className="flex items-center gap-2 px-3.5 py-2.5 cursor-grab active:cursor-grabbing bg-gradient-to-r from-surface-1/60 to-surface-0/40 touch-none"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
+          className="flex items-center gap-2 px-3.5 py-2.5 cursor-grab active:cursor-grabbing bg-gradient-to-r from-surface-1/60 to-surface-0/40"
+          onMouseDown={onDragStart}
         >
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <MonitorSmartphone className="w-4 h-4 text-accent" />

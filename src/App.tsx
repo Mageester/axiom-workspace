@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   BoardColumnId,
   DeviceIdentity,
@@ -10,7 +10,6 @@ import type {
   SyncStatus,
   TrayBoardSummary,
   TrayEventSummary,
-  TrayNotification,
   TrayRepoSummary,
   TrayWidgetState,
   WorkCard,
@@ -19,7 +18,6 @@ import type {
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { RepoDiscoveryModal } from "./components/RepoDiscoveryModal";
-import { TrayWidget } from "./components/TrayWidget";
 import { Dashboard } from "./pages/Dashboard";
 import { ActivityPage } from "./pages/ActivityPage";
 import { ReposPage } from "./pages/ReposPage";
@@ -78,7 +76,9 @@ import {
 } from "./lib/sync";
 import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 
-import { initTray, updateTrayTooltip, destroyTray, openMainWindow } from "./lib/tray";
+import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMainWindow, createWidgetWindow, broadcastWidgetState, broadcastNotification } from "./lib/tray";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 
 const APP_VERSION = "1.1.0";
 const FOCUS_AUTO_SYNC_MS = 2 * 60 * 1000;
@@ -193,9 +193,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [pullingPaths, setPullingPaths] = useState<Set<string>>(new Set());
-  const [widgetVisible, setWidgetVisible] = useState(true);
-  const [widgetExpanded, setWidgetExpanded] = useState(true);
-  const [trayNotifications, setTrayNotifications] = useState<TrayNotification[]>([]);
+  const [_widgetCreated, setWidgetCreated] = useState(false);
   const trayInitializedRef = useRef(false);
   const prevSessionIdsRef = useRef<Set<string>>(new Set());
   const syncInFlightRef = useRef(false);
@@ -286,13 +284,14 @@ function App() {
     currentUser: setupState.identity.userName,
   }), [activeSessions, trayRepoSummaries, trayRecentEvents, trayBoardSummary, syncStatus, syncSettings.lastSyncAt, setupState.identity.userName]);
 
-  const dismissNotification = useCallback((id: string) => {
-    setTrayNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
-
   const notificationsInitializedRef = useRef(false);
 
-  // Session change detection for notifications
+  // Broadcast widget state to separate widget window whenever it changes
+  useEffect(() => {
+    void broadcastWidgetState(trayWidgetState);
+  }, [trayWidgetState]);
+
+  // Session change detection — broadcast notifications to widget window
   useEffect(() => {
     const currentIds = new Set(activeSessions.map((s) => s.id));
     const prevIds = prevSessionIdsRef.current;
@@ -305,15 +304,14 @@ function App() {
 
     for (const s of activeSessions) {
       if (!prevIds.has(s.id) && s.userName !== setupState.identity.userName) {
-        const notification: TrayNotification = {
+        void broadcastNotification({
           id: `notif-${s.id}-started`,
           type: "session_started",
           title: `${s.userName} started working`,
           message: `${s.repoName}${s.branch ? ` (${s.branch})` : ""}`,
           userName: s.userName,
           timestamp: new Date().toISOString(),
-        };
-        setTrayNotifications((prev) => [...prev, notification]);
+        });
       }
     }
 
@@ -321,15 +319,14 @@ function App() {
       if (!currentIds.has(id)) {
         const ended = sessions.find((s) => s.id === id);
         if (ended && ended.userName !== setupState.identity.userName) {
-          const notification: TrayNotification = {
+          void broadcastNotification({
             id: `notif-${id}-ended`,
             type: "session_ended",
             title: `${ended.userName} finished working`,
             message: `${ended.repoName}${ended.endNote ? ` — ${ended.endNote}` : ""}`,
             userName: ended.userName,
             timestamp: new Date().toISOString(),
-          };
-          setTrayNotifications((prev) => [...prev, notification]);
+          });
         }
       }
     }
@@ -337,25 +334,52 @@ function App() {
     prevSessionIdsRef.current = currentIds;
   }, [activeSessions, sessions, setupState.identity.userName]);
 
-  // Initialize tray icon
+  // Initialize tray icon + widget window + minimize-to-tray
   useEffect(() => {
     if (!setupState.setupComplete || trayInitializedRef.current) return;
     trayInitializedRef.current = true;
 
     const trayPromise = initTray({
-      onToggleWidget: () => setWidgetVisible((v) => !v),
       onSyncNow: () => void handleSyncNow(false),
-      onOpenMainWindow: openMainWindow,
       onQuit: async () => {
+        await destroyWidgetWindow();
         await destroyTray();
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
         const win = getCurrentWindow();
         await win.destroy();
       },
     });
 
+    void createWidgetWindow().then(() => setWidgetCreated(true));
+
+    // Listen for events from widget window
+    const unlisteners: (() => void)[] = [];
+    void (async () => {
+      const u1 = await listen("widget:sync-request", () => {
+        void handleSyncNow(false);
+      });
+      unlisteners.push(u1);
+
+      const u2 = await listen("widget:open-main", () => {
+        void openMainWindow();
+      });
+      unlisteners.push(u2);
+    })();
+
+    // Hide to tray on close instead of quitting
+    let unlistenClose: (() => void) | undefined;
+    void (async () => {
+      const win = getCurrentWindow();
+      unlistenClose = await win.onCloseRequested(async (event) => {
+        event.preventDefault();
+        await win.hide();
+      });
+    })();
+
     return () => {
       void trayPromise.then(() => destroyTray());
+      void destroyWidgetWindow();
+      unlisteners.forEach((u) => u());
+      unlistenClose?.();
       trayInitializedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1355,19 +1379,6 @@ function App() {
         onAddRepo={addRepo}
       />
       {renderPage()}
-      {widgetVisible && (
-        <TrayWidget
-          state={trayWidgetState}
-          notifications={trayNotifications}
-          expanded={widgetExpanded}
-          isSyncing={syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error"}
-          onToggleExpand={() => setWidgetExpanded((v) => !v)}
-          onClose={() => setWidgetVisible(false)}
-          onSyncNow={() => void handleSyncNow(false)}
-          onOpenMainWindow={openMainWindow}
-          onDismissNotification={dismissNotification}
-        />
-      )}
     </div>
   );
 }
