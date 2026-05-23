@@ -8,11 +8,8 @@ export type RepoChangeKind =
   | "untracked";
 
 export type NavPage =
-  | "dashboard"
-  | "board"
-  | "repos"
-  | "sessions"
-  | "locks"
+  | "today"
+  | "projects"
   | "activity"
   | "settings";
 

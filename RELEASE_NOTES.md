@@ -1,4 +1,32 @@
-# Axiom Workspace v1.0.0
+# Axiom Workspace v1.3.0 — Lean Daily Workspace
+
+Status: Product-level UX simplification and performance polish.
+
+## New in v1.3.0
+
+- **Today-first Layout**: A simplified daily status screen is now the default landing page. It focuses on the most critical operational questions: Are you working? Who else is active? Is the workspace healthy?
+- **Simplified Navigation**: Consolidated navigation into four clear areas: Today, Projects, Activity, and Settings. Removed redundant screens like Board, Sessions, and Locks to reduce cognitive load.
+- **Cleaner Projects View**: Refactored the repository overview into a streamlined Projects page. Project cards now use human-readable status language and hide technical Git noise by default.
+- **Human-Readable Activity**: The activity feed now provides a quiet, readable timeline of meaningful events (e.g., "Riley started work") instead of raw technical logs.
+- **Refined Settings**: Moved advanced configuration, diagnostics, and local reset controls into a secondary 'Advanced' area to keep the main settings interface focused on identity and automation.
+- **Premium Dark Aesthetic**: Updated the visual design with a focus on hierarchy, whitespace, and refined typography. The UI now feels more like a high-end internal operations tool.
+- **Performance Polish**: Reduced unnecessary re-renders and optimized the Today screen to be the fastest and lightest area of the app.
+- **Preserved Foundation**: Maintained all v1.2.0 improvements to Tauri reliability, tray icon loading, widget positioning, and expanded permissions.
+
+# Axiom Workspace v1.2.0
+
+Status: Improved tray/widget foundation and Tauri reliability.
+
+## New in v1.2.0
+
+- **Tray Widget**: Added tray widget to Windows configuration for quick status access.
+- **Expanded Permissions**: Updated Tauri permissions for window, event, tray, menu, and webview APIs.
+- **Improved Icon Loading**: Tray icon loading now uses bundled runtime assets for better reliability.
+- **Widget Positioning**: Improved widget positioning using primary monitor dimensions.
+- **Resizable Widget**: The widget window is now resizable for better flexibility.
+- **Version Alignment**: Version bumped to 1.2.0 across all configuration files.
+
+
 
 Status: private internal release for Aidan and Riley.
 

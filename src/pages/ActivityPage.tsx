@@ -68,37 +68,27 @@ function isErrorEvent(event: WorkspaceEvent): boolean {
   return Boolean(payload.error) || Boolean(payload.lastCommandError);
 }
 
-function eventDetail(event: WorkspaceEvent): string {
+function eventDescription(event: WorkspaceEvent): string {
   const payload = event.payload as Record<string, unknown> | null;
-  if (!payload) return "";
+  if (!payload) return event.type;
 
-  if (event.type === "session_created") {
-    const session = payload.session as Record<string, unknown> | undefined;
-    if (session && typeof session.title === "string" && typeof session.repoName === "string") {
-      return `${session.title} in ${session.repoName}`;
+  switch (event.type) {
+    case "session_created": {
+      const session = payload.session as Record<string, unknown> | undefined;
+      return `Started work on ${session?.repoName || "a project"}`;
     }
+    case "session_ended": {
+      return payload.endNote ? `Finished work — ${payload.endNote}` : "Finished work";
+    }
+    case "sync_completed":
+      return "Workspace synced successfully";
+    case "repo_refreshed": {
+      const path = payload.repoPath as string | undefined;
+      return path === "all" ? "Refreshed all projects" : `Refreshed ${path}`;
+    }
+    default:
+      return event.type.replace(/_/g, " ");
   }
-
-  if (event.type === "session_ended") {
-    const sessionId = payload.sessionId;
-    const endNote = payload.endNote;
-    const parts: string[] = [];
-    if (typeof sessionId === "string") parts.push(sessionId.slice(0, 8));
-    if (typeof endNote === "string" && endNote.trim()) parts.push(endNote.trim());
-    return parts.join(" — ");
-  }
-
-  if (event.type === "sync_completed") {
-    const durationMs = payload.durationMs;
-    if (typeof durationMs === "number") return formatDuration(durationMs);
-  }
-
-  if (event.type === "repo_refreshed") {
-    const repoPath = payload.repoPath;
-    if (typeof repoPath === "string") return repoPath === "all" ? "All repos" : repoPath;
-  }
-
-  return "";
 }
 
 export function ActivityPage({ events, syncSettings, repoDiagnostics }: ActivityPageProps) {
@@ -128,144 +118,62 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics }: Activity
     return filtered.slice(0, 50);
   }, [sortedEvents, filter]);
 
-  const lastSyncOk = syncSettings.lastSyncAt && !syncSettings.lastSyncError;
-  const lastSyncFailed = Boolean(syncSettings.lastSyncError);
-
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-auto bg-surface-0">
       <PageHeader
-        eyebrow="Audit trail"
+        eyebrow="Timeline"
         title="Activity"
-        description="A calm timeline of work sessions, syncs, repo refreshes, and issues that need attention."
+        description="A quiet history of what's been happening in the workspace."
       />
 
-      <main className="space-y-6 p-8">
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Upload size={14} className={lastSyncFailed ? "text-status-locked" : lastSyncOk ? "text-status-clean" : "text-text-muted"} />
-              <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">Last Sync</h3>
-            </div>
-            {syncSettings.lastSyncAt ? (
-              <div className="space-y-1.5">
-                <p className="text-sm text-text-primary">{formatDateTime(syncSettings.lastSyncAt)}</p>
-                {syncSettings.lastSyncDurationMs != null && (
-                  <p className="text-xs text-text-muted">{formatDuration(syncSettings.lastSyncDurationMs)}</p>
-                )}
-                {syncSettings.lastSyncError && (
-                  <p className="text-xs text-status-locked">{syncSettings.lastSyncError}</p>
-                )}
-                {syncSettings.lastSyncStatus && !syncSettings.lastSyncError && (
-                  <p className="text-xs text-status-clean">{syncSettings.lastSyncStatus}</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted">Not synced yet</p>
-            )}
-          </div>
+      <main className="max-w-4xl mx-auto p-8 space-y-8">
+        <div className="flex items-center gap-1 p-1 bg-surface-1 border border-border/50 rounded-xl w-fit">
+          {(Object.keys(FILTER_LABELS) as ActivityFilter[]).map((key) => (
+            <button
+              key={key}
+              className={`rounded-lg px-4 py-1.5 text-xs font-medium transition-all ${
+                filter === key
+                  ? "bg-surface-3 text-text-primary shadow-sm"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+              onClick={() => setFilter(key)}
+            >
+              {FILTER_LABELS[key]}
+            </button>
+          ))}
+        </div>
 
-          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <GitBranch size={14} className="text-text-muted" />
-              <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">Last Repo Refresh</h3>
-            </div>
-            {repoDiagnostics.lastRefreshAt ? (
-              <div className="space-y-1.5">
-                <p className="text-sm text-text-primary">{repoDiagnostics.lastRefreshRepoPath ?? "Unknown"}</p>
-                <p className="text-xs text-text-muted">
-                  {formatDuration(repoDiagnostics.lastRefreshDurationMs)}
-                  {repoDiagnostics.gitCommandCount != null && ` / ${repoDiagnostics.gitCommandCount} git commands`}
-                </p>
-                {repoDiagnostics.lastCommandError && (
-                  <p className="text-xs text-status-locked">{repoDiagnostics.lastCommandError}</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted">No refreshes yet</p>
-            )}
+        {filteredEvents.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-sm text-text-muted">No activity found</p>
           </div>
-
-          <div className="rounded-xl border border-border/80 bg-surface-1/70 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              {(syncSettings.lastSyncError || repoDiagnostics.lastCommandError) ? (
-                <AlertCircle size={14} className="text-status-locked" />
-              ) : (
-                <AlertCircle size={14} className="text-text-muted" />
-              )}
-              <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">Last Error</h3>
-            </div>
-            <p className="text-sm text-text-primary">
-              {syncSettings.lastSyncCommandError || repoDiagnostics.lastCommandError || syncSettings.lastSyncError || "No recent errors"}
-            </p>
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary">
-              Event Timeline
-            </h3>
-            <span className="text-sm text-text-muted">{filteredEvents.length} events</span>
-          </div>
-
-          <div className="mb-4 flex items-center gap-1 rounded-xl border border-border/70 bg-surface-1/50 p-1">
-            {(Object.keys(FILTER_LABELS) as ActivityFilter[]).map((key) => (
-              <button
-                key={key}
-                className={`rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
-                  filter === key
-                    ? "bg-accent text-white shadow-[0_10px_30px_rgba(47,111,237,0.22)]"
-                    : "text-text-secondary hover:bg-surface-3 hover:text-text-primary"
-                }`}
-                onClick={() => setFilter(key)}
+        ) : (
+          <div className="space-y-4">
+            {filteredEvents.map((event, index) => (
+              <div
+                key={event.id}
+                className="group flex items-center justify-between gap-6 p-4 rounded-2xl border border-transparent hover:border-border/50 hover:bg-surface-1/50 transition-all"
               >
-                {FILTER_LABELS[key]}
-              </button>
-            ))}
-          </div>
-
-          {filteredEvents.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/80 bg-surface-1/40 p-10 text-center">
-              <p className="text-sm text-text-muted">
-                {filter === "all"
-                  ? "No events yet. Start work or run Sync Now to create the first event."
-                  : `No ${FILTER_LABELS[filter].toLowerCase()} events found.`}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border/80 bg-surface-1/70 overflow-hidden">
-              {filteredEvents.map((event, index) => (
-                <div
-                  key={event.id}
-                  className={`flex items-start gap-4 px-5 py-3.5 ${index < filteredEvents.length - 1 ? "border-b border-border" : ""}`}
-                >
-                  <div className="mt-0.5 shrink-0">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-surface-1 flex items-center justify-center border border-border/50">
                     <EventIcon type={event.type} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <p className="text-sm font-medium text-text-primary">
-                        {eventLabel(event.type)}
-                      </p>
-                      <span className="shrink-0 text-xs text-text-muted">
-                        {formatDateTime(event.createdAt)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                      <span>{event.userName}</span>
-                      {eventDetail(event) && (
-                        <>
-                          <span className="text-border">|</span>
-                          <span className="truncate">{eventDetail(event)}</span>
-                        </>
-                      )}
-                    </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text-primary truncate">
+                      {event.userName} {eventDescription(event)}
+                    </p>
+                    <p className="text-xs text-text-muted mt-0.5">
+                      {eventLabel(event.type)}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+                <span className="shrink-0 text-xs text-text-muted font-medium">
+                  {formatDateTime(event.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
