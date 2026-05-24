@@ -8,21 +8,17 @@ import {
   formatElapsed,
   timeAgo,
   syncStatusLabel,
-  syncStatusColor,
-  sessionDurationStage,
 } from "../lib/format";
+import { normalizeDisplayName, samePerson } from "../lib/identity";
 import {
   ArrowUpRight,
-  ChevronDown,
   MonitorSmartphone,
   RefreshCw,
-  Users,
   X,
   Zap,
   CheckCircle2,
   Loader2,
   Bell,
-  Clock,
 } from "lucide-react";
 
 const NOTIFICATION_DURATION_MS = 5000;
@@ -65,15 +61,6 @@ function NotificationToast({ notification, onDismiss, onClickMain }: Notificatio
   );
 }
 
-function normalizeTeammateName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.toLowerCase().startsWith("riley")) {
-    return "Riley";
-  }
-  const firstSpace = trimmed.indexOf(" ");
-  return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
-}
-
 export interface TrayWidgetProps {
   state: TrayWidgetState;
   notifications: TrayNotification[];
@@ -113,8 +100,15 @@ export function TrayWidget({
   void tick;
 
   const activeSessions = state.activeSessions.filter((s) => s.status === "active");
-  const mySession = activeSessions.find((s) => s.userName === state.currentUser);
-  const otherSessions = activeSessions.filter((s) => s.userName !== state.currentUser);
+  const mySession = activeSessions.find((s) => samePerson(s.userName, state.currentUser));
+  const teammateGroups = new Map<string, WorkSession[]>();
+  activeSessions
+    .filter((s) => !samePerson(s.userName, state.currentUser))
+    .forEach((session) => {
+      const name = normalizeDisplayName(session.userName);
+      teammateGroups.set(name, [...(teammateGroups.get(name) || []), session]);
+    });
+  const teammates = Array.from(teammateGroups.entries());
 
   return (
     <div className="select-none w-[320px]">
@@ -164,21 +158,25 @@ export function TrayWidget({
           </div>
 
           {/* Teammates */}
-          {otherSessions.length > 0 && (
+          {teammates.length > 0 && (
             <div className="space-y-2 pt-4 border-t border-border/30">
               <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Teammates</p>
               <div className="space-y-3">
-                {otherSessions.map(s => (
-                  <div key={s.id} className="flex items-center justify-between gap-3">
+                {teammates.map(([name, sessions]) => {
+                  const longest = [...sessions].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())[0];
+                  return (
+                  <div key={`${name}-${longest.repoId}`} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-text-primary truncate">{normalizeTeammateName(s.userName)}</p>
-                      <p className="text-[10px] text-text-muted truncate">{s.repoName}</p>
+                      <p className="text-[11px] font-semibold text-text-primary truncate">{name}</p>
+                      <p className="text-[10px] text-text-muted truncate">
+                        {sessions.length > 1 ? `${sessions.length} sessions on ${longest.repoName}` : longest.repoName}
+                      </p>
                     </div>
                     <span className="text-[10px] font-medium text-text-muted tabular-nums">
-                      {formatElapsed(s.startedAt)}
+                      {formatElapsed(longest.startedAt)}
                     </span>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
@@ -195,7 +193,8 @@ export function TrayWidget({
               {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
             </button>
             <span className="text-[10px] text-text-muted">
-              {state.lastSyncAt ? timeAgo(state.lastSyncAt) : "Not synced"}
+              {state.syncLabel || syncStatusLabel(state.syncStatus)}
+              {state.syncDetail ? ` · ${state.syncDetail}` : state.lastSyncAt ? ` · ${timeAgo(state.lastSyncAt)}` : ""}
             </span>
           </div>
           <button 

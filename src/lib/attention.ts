@@ -1,5 +1,6 @@
 import type { LiveRepo, SyncSettings, WorkSession } from "../types";
 import type { AttentionItem, RegisteredProject } from "../types/workspace";
+import { normalizeDisplayName, samePerson } from "./identity";
 
 export function computeAttentionItems(
   repos: LiveRepo[],
@@ -78,9 +79,10 @@ export function computeAttentionItems(
   const teammateSessionsByRepo = new Map<string, WorkSession[]>();
   const sessionsByUserAndRepo = new Map<string, WorkSession[]>();
   for (const session of activeSessions) {
-    const sessionKey = `${session.userName.toLowerCase()}-${session.repoId}`;
+    const displayName = normalizeDisplayName(session.userName);
+    const sessionKey = `${displayName.toLowerCase()}-${session.repoId}`;
     sessionsByUserAndRepo.set(sessionKey, [...(sessionsByUserAndRepo.get(sessionKey) || []), session]);
-    if (session.userName.toLowerCase() !== currentUser.toLowerCase()) {
+    if (!samePerson(session.userName, currentUser)) {
       const existing = teammateSessionsByRepo.get(session.repoId) || [];
       existing.push(session);
       teammateSessionsByRepo.set(session.repoId, existing);
@@ -89,10 +91,11 @@ export function computeAttentionItems(
 
   for (const sessions of sessionsByUserAndRepo.values()) {
     if (sessions.length > 1) {
+      const displayName = normalizeDisplayName(sessions[0].userName);
       items.push({
-        id: `duplicate-session-${sessions[0].userName}-${sessions[0].repoId}`,
+        id: `duplicate-session-${displayName}-${sessions[0].repoId}`,
         title: "Duplicate active sessions",
-        description: `${sessions[0].userName} has more than one active session on ${sessions[0].repoName}.`,
+        description: `${displayName} has ${sessions.length} active sessions on ${sessions[0].repoName}.`,
         severity: "warning",
         projectId: sessions[0].repoId,
       });
@@ -101,13 +104,13 @@ export function computeAttentionItems(
 
   const myActiveRepos = new Set(
     activeSessions
-      .filter(s => s.userName.toLowerCase() === currentUser.toLowerCase())
+      .filter(s => samePerson(s.userName, currentUser))
       .map(s => s.repoId),
   );
 
   for (const [repoId, sessions] of teammateSessionsByRepo) {
     if (myActiveRepos.has(repoId)) {
-      const names = [...new Set(sessions.map(s => s.userName))].join(", ");
+      const names = [...new Set(sessions.map(s => normalizeDisplayName(s.userName)))].join(", ");
       items.push({
         id: `teammate-same-${repoId}`,
         title: "Teammate active on same project",
@@ -118,18 +121,30 @@ export function computeAttentionItems(
     }
   }
 
+  const longSessions = new Map<string, WorkSession[]>();
   for (const session of activeSessions) {
-    if (session.userName.toLowerCase() === currentUser.toLowerCase()) continue;
+    if (samePerson(session.userName, currentUser)) continue;
     const elapsed = Date.now() - new Date(session.startedAt).getTime();
     const hours = elapsed / (1000 * 60 * 60);
     if (hours > 6) {
-      items.push({
-        id: `long-session-${session.id}`,
-        title: "Long-running session",
-        description: `${session.userName} has been working on ${session.repoName} for ${Math.floor(hours)}h.`,
-        severity: "info",
-      });
+      const user = normalizeDisplayName(session.userName);
+      const key = `${user.toLowerCase()}-${session.repoId}`;
+      longSessions.set(key, [...(longSessions.get(key) || []), session]);
     }
+  }
+
+  for (const sessions of longSessions.values()) {
+    const user = normalizeDisplayName(sessions[0].userName);
+    const longestHours = Math.max(...sessions.map((session) => Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 36e5)));
+    items.push({
+      id: `long-session-${user}-${sessions[0].repoId}`,
+      title: sessions.length > 1 ? `${user} has long-running sessions` : `${user} has a long-running session`,
+      description: sessions.length > 1
+        ? `${sessions[0].repoName} · ${sessions.length} sessions · longest ${longestHours}h`
+        : `${sessions[0].repoName} · ${longestHours}h`,
+      severity: "info",
+      projectId: sessions[0].repoId,
+    });
   }
 
   for (const project of registeredProjects) {

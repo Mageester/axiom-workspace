@@ -15,6 +15,7 @@ import type {
   WorkspaceEvent,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
+import { TitleBar } from "./components/TitleBar";
 import { RepoDiscoveryModal } from "./components/RepoDiscoveryModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { TodayPage } from "./pages/TodayPage";
@@ -67,12 +68,15 @@ import {
 import { cloneRepo, discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
 import { CloudflareWorkspaceAdapter, LocalWorkspaceAdapter, slugifyProjectName } from "./lib/workspace-adapter";
 import type { CommandItem, HandoffNote, RegisteredProject } from "./types/workspace";
+import { humanizeActivityEvent } from "./lib/activity";
+import { normalizeDisplayName, samePerson } from "./lib/identity";
+import { getSyncModeInfo } from "./lib/sync-mode";
 
 import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMainWindow, createWidgetWindow, broadcastWidgetState, broadcastNotification } from "./lib/tray";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
 
@@ -122,28 +126,6 @@ function createChecklist(state: SetupState): SetupChecklistItem[] {
 function formatError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   return typeof error === "string" && error ? error : fallback;
-}
-
-function formatEventDescription(event: WorkspaceEvent): string {
-  const payload = event.payload as Record<string, unknown>;
-  switch (event.type) {
-    case "session_created": {
-      const s = payload.session as { repoName?: string } | undefined;
-      return `Started work on ${s?.repoName || "unknown repo"}`;
-    }
-    case "session_ended": {
-      const note = payload.endNote as string | undefined;
-      return note ? `Finished work — ${note}` : "Finished work";
-    }
-    case "sync_completed":
-      return "Workspace synced successfully";
-    case "repo_refreshed": {
-      const path = payload.repoPath as string | undefined;
-      return path === "all" ? "Refreshed all projects" : `Refreshed ${path || "project"}`;
-    }
-    default:
-      return event.type.replace(/_/g, " ");
-  }
 }
 
 function projectFromRepo(repo: { id: string; name: string; path: string; currentBranch: string }): Omit<RegisteredProject, "id" | "createdAt" | "updatedAt"> {
@@ -230,6 +212,10 @@ function App() {
     const token = syncSettings.cloudSyncDeviceToken?.trim();
     return endpoint && token ? new CloudflareWorkspaceAdapter(endpoint, token) : null;
   }, [syncSettings.cloudSyncDeviceToken, syncSettings.cloudSyncEndpoint]);
+  const syncInfo = useMemo(
+    () => getSyncModeInfo(setupState, syncSettings, syncStatus, cloudSyncUnavailable),
+    [setupState, syncSettings, syncStatus, cloudSyncUnavailable],
+  );
 
   // Tray widget state
   const trayRepoSummaries = useMemo((): TrayRepoSummary[] =>
@@ -240,7 +226,7 @@ function App() {
       changedFileCount: r.changedFileCount,
       behind: r.behind,
       hasLockConflict: activeSessions.some(
-        (s) => s.repoId === r.id && s.userName !== setupState.identity.userName,
+        (s) => s.repoId === r.id && !samePerson(s.userName, setupState.identity.userName),
       ),
     })),
   [repos, activeSessions, setupState.identity.userName]);
@@ -262,8 +248,8 @@ function App() {
       .map((e) => ({
         id: e.id,
         type: e.type,
-        userName: e.userName,
-        description: formatEventDescription(e),
+        userName: normalizeDisplayName(e.userName),
+        description: humanizeActivityEvent(e),
         createdAt: e.createdAt,
       })),
   [events]);
@@ -274,9 +260,11 @@ function App() {
     recentEvents: trayRecentEvents,
     boardSummary: trayBoardSummary,
     syncStatus,
+    syncLabel: syncInfo.label,
+    syncDetail: syncInfo.detail,
     lastSyncAt: syncSettings.lastSyncAt,
-    currentUser: setupState.identity.userName,
-  }), [activeSessions, trayRepoSummaries, trayRecentEvents, trayBoardSummary, syncStatus, syncSettings.lastSyncAt, setupState.identity.userName]);
+    currentUser: normalizeDisplayName(setupState.identity.userName),
+  }), [activeSessions, trayRepoSummaries, trayRecentEvents, trayBoardSummary, syncStatus, syncInfo.label, syncInfo.detail, syncSettings.lastSyncAt, setupState.identity.userName]);
 
   // Broadcast widget state
   useEffect(() => {
@@ -294,13 +282,14 @@ function App() {
       return;
     }
     for (const s of activeSessions) {
-      if (!prevIds.has(s.id) && s.userName !== setupState.identity.userName) {
+      if (!prevIds.has(s.id) && !samePerson(s.userName, setupState.identity.userName)) {
+        const displayName = normalizeDisplayName(s.userName);
         void broadcastNotification({
           id: `notif-${s.id}-started`,
           type: "session_started",
-          title: `${s.userName} started working`,
+          title: `${displayName} started working`,
           message: `${s.repoName}${s.branch ? ` (${s.branch})` : ""}`,
-          userName: s.userName,
+          userName: displayName,
           timestamp: new Date().toISOString(),
         });
       }
@@ -308,13 +297,14 @@ function App() {
     for (const id of prevIds) {
       if (!currentIds.has(id)) {
         const ended = sessions.find((s) => s.id === id);
-        if (ended && ended.userName !== setupState.identity.userName) {
+        if (ended && !samePerson(ended.userName, setupState.identity.userName)) {
+          const displayName = normalizeDisplayName(ended.userName);
           void broadcastNotification({
             id: `notif-${id}-ended`,
             type: "session_ended",
-            title: `${ended.userName} finished working`,
+            title: `${displayName} finished working`,
             message: `${ended.repoName}${ended.endNote ? ` — ${ended.endNote}` : ""}`,
-            userName: ended.userName,
+            userName: displayName,
             timestamp: new Date().toISOString(),
           });
         }
@@ -424,11 +414,23 @@ function App() {
       .then((projects) => {
         if (!cancelled) {
           setCloudSyncUnavailable(false);
+          persistSyncSettings({
+            ...syncSettingsRef.current,
+            cloudSyncLastCheckedAt: new Date().toISOString(),
+            cloudSyncLastError: undefined,
+          });
           setRegisteredProjects((current) => mergeProjects(current, projects));
         }
       })
       .catch(() => {
-        if (!cancelled) setCloudSyncUnavailable(true);
+        if (!cancelled) {
+          setCloudSyncUnavailable(true);
+          persistSyncSettings({
+            ...syncSettingsRef.current,
+            cloudSyncLastCheckedAt: new Date().toISOString(),
+            cloudSyncLastError: "Cloudflare backend unavailable.",
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -608,7 +610,7 @@ function App() {
       saveSessions(next);
       const endedSession = next.find(s => s.id === sessionId);
       if (endedSession?.endedAt) {
-        const event = createWorkspaceEvent("session_ended", { sessionId, endedAt: endedSession.endedAt, endNote: endedSession.endNote }, setupState.identity);
+        const event = createWorkspaceEvent("session_ended", { sessionId, endedAt: endedSession.endedAt, endNote: endedSession.endNote, session: endedSession, repoName: endedSession.repoName }, setupState.identity);
         setEvents(eventPrev => { const eventNext = dedupeEvents([...eventPrev, event]); saveEvents(eventNext); return eventNext; });
         if (summary || details) {
           void saveHandoff(endedSession, summary, details);
@@ -641,8 +643,10 @@ function App() {
       try {
         await cloudAdapter.addHandoff(noteInput);
         setCloudSyncUnavailable(false);
+        persistSyncSettings({ ...syncSettingsRef.current, cloudSyncLastCheckedAt: new Date().toISOString(), cloudSyncLastError: undefined });
       } catch {
         setCloudSyncUnavailable(true);
+        persistSyncSettings({ ...syncSettingsRef.current, cloudSyncLastCheckedAt: new Date().toISOString(), cloudSyncLastError: "Cloudflare backend unavailable." });
       }
     }
   }
@@ -666,6 +670,7 @@ function App() {
       const currentEvents = eventsRef.current;
       if (!currentSetupState.setupComplete || !currentSyncSettings.syncLocalPath.trim()) {
         setSyncStatus("error");
+        persistSyncSettings({ ...currentSyncSettings, lastSyncError: "GitHub sync is not configured. Workspace state is saved locally." });
         return;
       }
       setSyncStatus("checking");
@@ -682,6 +687,7 @@ function App() {
       syncRetryCountRef.current = 0;
     } catch (error) {
       setSyncStatus("error");
+      persistSyncSettings({ ...syncSettingsRef.current, lastSyncError: formatError(error, "Sync failed.") });
     } finally {
       syncInFlightRef.current = false;
     }
@@ -709,8 +715,10 @@ function App() {
       try {
         await cloudAdapter.addProject(projectInput);
         setCloudSyncUnavailable(false);
+        persistSyncSettings({ ...syncSettingsRef.current, cloudSyncLastCheckedAt: new Date().toISOString(), cloudSyncLastError: undefined });
       } catch {
         setCloudSyncUnavailable(true);
+        persistSyncSettings({ ...syncSettingsRef.current, cloudSyncLastCheckedAt: new Date().toISOString(), cloudSyncLastError: "Cloudflare backend unavailable." });
       }
     }
   }
@@ -768,7 +776,7 @@ function App() {
   }, []);
 
   const commandItems = useMemo<CommandItem[]>(() => {
-    const mySession = activeSessions.find((session) => session.userName.toLowerCase() === setupState.identity.userName.toLowerCase());
+    const mySession = activeSessions.find((session) => samePerson(session.userName, setupState.identity.userName));
     const missingProject = registeredProjects.find((project) => project.installStatus === "not_installed");
     const firstRepo = repos[0];
     return [
@@ -812,7 +820,7 @@ function App() {
       {
         id: "sync-now",
         label: "Sync now",
-        description: cloudSyncUnavailable ? "Cloud sync unavailable" : "Refresh workspace state",
+        description: syncInfo.label,
         category: "system",
         action: () => void handleSyncNow(false),
         keywords: ["cloud", "refresh"],
@@ -846,18 +854,18 @@ function App() {
         action: () => setActiveNav("settings"),
       },
     ];
-  }, [activeSessions, cloudSyncUnavailable, registeredProjects, repos, setupState.identity.userName, refreshAll]);
+  }, [activeSessions, syncInfo.label, registeredProjects, repos, setupState.identity.userName, refreshAll]);
 
   function renderPage() {
     switch (activeNav) {
       case "today":
-        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} setupState={setupState} syncSettings={syncSettings} syncStatus={syncStatus} loading={loading} registeredProjects={registeredProjects} cloudSyncUnavailable={cloudSyncUnavailable} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onNavigate={setActiveNav} />;
+        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} syncSettings={syncSettings} syncInfo={syncInfo} syncStatus={syncStatus} loading={loading} registeredProjects={registeredProjects} cloudSyncUnavailable={cloudSyncUnavailable} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onNavigate={setActiveNav} />;
       case "projects":
         return <ProjectsPage repos={repos} registeredProjects={registeredProjects} repoNicknames={repoNicknames} activeSessions={activeSessions} loading={loading} refreshingPaths={refreshingPaths} pullingPaths={pullingPaths} onRefreshAll={refreshAll} onRefreshRepo={refreshRepo} onAddRepo={addRepo} onAddProject={addRegisteredProject} onCloneProject={cloneRegisteredProject} onRemoveRepo={removeRepo} onRenameRepo={setRepoNickname} onStartSession={startSession} onFinishSession={finishSession} onPullRepo={handlePullRepo} getRepoSessions={r => activeSessions.filter(s => s.repoId === r.id)} defaultUserName={setupState.identity.userName} />;
       case "activity":
         return <ActivityPage events={events} syncSettings={syncSettings} repoDiagnostics={repoDiagnostics} handoffNotes={handoffNotes} />;
       case "settings":
-        return <SettingsPage setupState={setupState} checklist={checklist} settings={syncSettings} syncStatus={syncStatus} eventCount={events.length} appVersion={APP_VERSION} gitVersion={gitVersion} repoCount={repos.length} registeredProjectCount={registeredProjects.length} activeSessionCount={activeSessions.length} repoDiagnostics={repoDiagnostics} cloudSyncUnavailable={cloudSyncUnavailable} onIdentityChange={persistIdentity} onSetupChange={persistSetupState} onSettingsChange={persistSyncSettings} onValidateSetup={() => runSetupCheck(true)} onSyncNow={handleSyncNow} onResetSetup={() => { persistSetupState(resetSetupState()); setActiveNav("today"); }} onResetSessionsAndLocks={() => { setSessions([]); saveSessions([]); }} onResetSyncState={() => { const r = resetSyncState(); persistSetupState(r.setupState); persistSyncSettings(r.syncSettings); }} onFullLocalReset={handleFullLocalReset} onResetDismissedSuggestions={() => {}} />;
+        return <SettingsPage setupState={setupState} checklist={checklist} settings={syncSettings} syncStatus={syncStatus} syncInfo={syncInfo} eventCount={events.length} appVersion={APP_VERSION} gitVersion={gitVersion} repoCount={repos.length} registeredProjectCount={registeredProjects.length} activeSessionCount={activeSessions.length} repoDiagnostics={repoDiagnostics} cloudSyncUnavailable={cloudSyncUnavailable} onIdentityChange={persistIdentity} onSetupChange={persistSetupState} onSettingsChange={persistSyncSettings} onValidateSetup={() => runSetupCheck(true)} onSyncNow={handleSyncNow} onResetSetup={() => { persistSetupState(resetSetupState()); setActiveNav("today"); }} onResetSessionsAndLocks={() => { setSessions([]); saveSessions([]); }} onResetSyncState={() => { const r = resetSyncState(); persistSetupState(r.setupState); persistSyncSettings(r.syncSettings); }} onFullLocalReset={handleFullLocalReset} onResetDismissedSuggestions={() => {}} />;
       default:
         return null;
     }
@@ -868,11 +876,14 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-surface-0">
-      <Sidebar activeItem={activeNav} onNavigate={setActiveNav} setupComplete={setupState.setupComplete} activeSessionCount={activeSessions.length} syncStatus={syncStatus} syncSettings={syncSettings} />
-      <RepoDiscoveryModal open={showDiscoveryModal} onClose={() => setShowDiscoveryModal(false)} onAddRepo={addRepo} />
-      <CommandPalette open={commandPaletteOpen} commands={commandItems} onClose={() => setCommandPaletteOpen(false)} />
-      {renderPage()}
+    <div className="flex h-screen flex-col bg-surface-0">
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar activeItem={activeNav} onNavigate={setActiveNav} setupComplete={setupState.setupComplete} activeSessionCount={activeSessions.length} syncStatus={syncStatus} syncSettings={syncSettings} syncInfo={syncInfo} />
+        <RepoDiscoveryModal open={showDiscoveryModal} onClose={() => setShowDiscoveryModal(false)} onAddRepo={addRepo} />
+        <CommandPalette open={commandPaletteOpen} commands={commandItems} onClose={() => setCommandPaletteOpen(false)} />
+        {renderPage()}
+      </div>
     </div>
   );
 }

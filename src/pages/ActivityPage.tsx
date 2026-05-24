@@ -3,6 +3,7 @@ import { Activity, AlertCircle, Clock, GitBranch, RefreshCw, Timer, Upload } fro
 import type { RepoDiagnostics, SyncSettings, WorkspaceEvent, WorkspaceEventType } from "../types";
 import type { HandoffNote } from "../types/workspace";
 import { PageHeader } from "../components/PageHeader";
+import { humanizeActivityEvent } from "../lib/activity";
 
 type ActivityFilter = "all" | "sessions" | "sync" | "repos" | "errors";
 
@@ -39,7 +40,7 @@ function eventLabel(type: string): string {
     case "session_updated": return "Note edited";
     case "note_added": return "Note added";
     case "snapshot_created": return "Snapshot saved";
-    case "sync_completed": return "Sync completed";
+    case "sync_completed": return "Workspace synced";
     case "repo_refreshed": return "Repo refreshed";
     default: return type.replace(/_/g, " ");
   }
@@ -60,33 +61,6 @@ function isErrorEvent(event: WorkspaceEvent): boolean {
   const payload = event.payload as Record<string, unknown> | null;
   if (!payload) return false;
   return Boolean(payload.error) || Boolean(payload.lastCommandError);
-}
-
-function eventDescription(event: WorkspaceEvent): string {
-  const payload = event.payload as Record<string, unknown> | null;
-  if (!payload) return event.type;
-
-  switch (event.type) {
-    case "session_created": {
-      const session = payload.session as Record<string, unknown> | undefined;
-      return `started work on ${session?.repoName || "a project"}`;
-    }
-    case "session_ended": {
-      return payload.endNote ? `finished work — ${payload.endNote}` : "finished work";
-    }
-    case "note_added": {
-      const handoff = payload.handoff as { summary?: string; details?: string } | undefined;
-      return handoff?.summary ? `handoff: ${handoff.summary}` : "left a handoff note";
-    }
-    case "sync_completed":
-      return "workspace synced successfully";
-    case "repo_refreshed": {
-      const path = payload.repoPath as string | undefined;
-      return path === "all" ? "refreshed all projects" : `refreshed ${path}`;
-    }
-    default:
-      return event.type.replace(/_/g, " ");
-  }
 }
 
 export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNotes }: ActivityPageProps) {
@@ -211,8 +185,14 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-text-primary truncate">
-                          {event.userName} <span className="font-medium text-text-secondary">{eventDescription(event)}</span>
+                          {humanizeActivityEvent(event)}
                         </p>
+                        {event.type === "note_added" && (() => {
+                          const handoff = (event.payload as { handoff?: { summary?: string } } | null)?.handoff;
+                          return handoff?.summary ? (
+                            <p className="mt-0.5 truncate text-[11px] text-text-secondary">Handoff: {handoff.summary}</p>
+                          ) : null;
+                        })()}
                         {/* Timestamps placed close inline with event info */}
                         <p className="text-[10px] text-text-muted mt-0.5 font-medium">
                           {eventLabel(event.type)} · {formatTime(event.createdAt)}

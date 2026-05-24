@@ -1,6 +1,6 @@
 # Axiom Workspace Cloudflare Backend
 
-This Worker is the v1.4.0 operational-state backend. It stores workspace state only: users, devices, projects, sessions, locks, activity events, handoff notes, repo status snapshots, sync metadata, and settings.
+This Worker is the v1.4.1 operational-state backend foundation. It stores workspace state only: users, devices, projects, sessions, locks, activity events, handoff notes, repo status snapshots, sync metadata, and settings.
 
 It must not store source code, GitHub tokens, local filesystem contents, or real device tokens.
 
@@ -55,7 +55,7 @@ The Worker stores only a SHA-256 hash of the token. The raw token should be save
 `wrangler.toml`:
 
 - `AXIOM_DB`: D1 binding
-- `API_VERSION`: `1.4.0`
+- `API_VERSION`: `1.4.1`
 - `ENVIRONMENT`: `production` or `development`
 
 Local CLI environment:

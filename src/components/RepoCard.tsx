@@ -21,6 +21,8 @@ import type { LiveRepo, WorkSession } from "../types";
 import type { ProjectSafety } from "../types/workspace";
 import { getRepoDisplayName } from "../lib/repos";
 import { assessProjectSafety, safetyColor, safetyBgColor } from "../lib/safety";
+import { normalizeDisplayName, samePerson } from "../lib/identity";
+import { projectStatusText } from "../lib/project-status";
 
 async function openFolder(path: string) {
   try { await revealItemInDir(path); } catch { try { await openPath(path); } catch {} }
@@ -75,16 +77,19 @@ export function RepoCard({
   );
 
   const mySession = useMemo(
-    () => activeSessions.find(s => s.userName.toLowerCase() === currentUser.toLowerCase() && s.repoId === repo.id),
+    () => activeSessions.find(s => samePerson(s.userName, currentUser) && s.repoId === repo.id),
     [activeSessions, currentUser, repo.id],
   );
 
   const teammateNames = useMemo(() => {
     const names = activeSessions
-      .filter(s => s.userName.toLowerCase() !== currentUser.toLowerCase() && s.repoId === repo.id)
-      .map(s => s.userName.split(" ")[0]);
+      .filter(s => !samePerson(s.userName, currentUser) && s.repoId === repo.id)
+      .map(s => normalizeDisplayName(s.userName));
     return [...new Set(names)];
   }, [activeSessions, currentUser, repo.id]);
+
+  const shouldDeemphasizeStart = safety.label !== "safe_to_start";
+  const startLabel = safety.label === "status_unavailable" ? "Refresh" : safety.label === "teammate_active" ? "Review" : "Start Work";
 
   return (
     <div className={`group rounded-xl border bg-surface-1 p-4 transition-all hover:border-border-hover shadow-sm ${
@@ -123,11 +128,9 @@ export function RepoCard({
               <GitBranch size={10} className="opacity-75" />
               {repo.currentBranch || "main"}
             </span>
-            {repo.changedFileCount > 0 && (
-              <span className="text-[10px] font-medium text-status-dirty">
-                {repo.changedFileCount} changed
-              </span>
-            )}
+            <span className={`text-[10px] font-medium ${repo.changedFileCount > 0 || repo.behind > 0 || repo.status === "error" ? "text-status-dirty" : "text-status-clean"}`}>
+              {projectStatusText(repo)}
+            </span>
             {teammateNames.length > 0 && (
               <span className="text-[10px] font-semibold text-status-dirty">
                 {teammateNames.join(", ")} active
@@ -155,11 +158,15 @@ export function RepoCard({
             </button>
           ) : (
             <button
-              className="h-7 px-3 rounded-lg bg-accent/10 border border-accent/20 text-[10px] font-bold text-accent hover:bg-accent/20 transition-all flex items-center gap-1.5 active:scale-[0.98]"
-              onClick={onStartSession}
+              className={`h-7 px-3 rounded-lg border text-[10px] font-bold transition-all flex items-center gap-1.5 active:scale-[0.98] ${
+                shouldDeemphasizeStart
+                  ? "bg-surface-2 border-border/40 text-text-primary hover:bg-surface-3"
+                  : "bg-accent/10 border-accent/20 text-accent hover:bg-accent/20"
+              }`}
+              onClick={safety.label === "status_unavailable" ? onRefresh : safety.label === "teammate_active" ? () => setDetailsOpen(true) : onStartSession}
             >
-              <Play size={10} fill="currentColor" />
-              Start Work
+              {safety.label === "status_unavailable" ? <RefreshCw size={10} /> : <Play size={10} fill="currentColor" />}
+              {startLabel}
             </button>
           )}
 

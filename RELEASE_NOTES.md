@@ -1,3 +1,30 @@
+# Axiom Workspace v1.4.1 — Command Layer Hardening
+
+Overview:
+v1.4.1 hardens the v1.4.0 Command Layer so the app is clearer about sync state, teammate identity, project safety, and daily work status.
+
+Highlights:
+- Explicit sync mode labels across Today, sidebar, Settings, and tray widget
+- Clear local, GitHub, and Cloudflare sync diagnostics
+- Consistent Aidan/Riley identity normalization in user-facing copy
+- Grouped stale and duplicate teammate session warnings
+- Safer Safe to Start / Review First logic for changed files, teammate overlap, behind remote, and unavailable status
+- Cleaner project status language such as Clean, 1 file changed, and Behind remote
+- Improved Activity copy with normalized names and human event descriptions
+- Tighter Today command surface with compact warnings and recent activity
+- Clearer Cloud Sync setup and device-token status copy
+- Dark custom Tauri title bar for the main window
+- Tray/widget copy preserved and clarified
+- v1.4.0 Command Layer stabilization without changing the local-first architecture
+
+Backend notes:
+- Cloudflare Worker and D1 foundation remain optional.
+- Cloud sync is only labeled active when endpoint and device token are configured and backend health has succeeded.
+- Source code, GitHub credentials, Cloudflare credentials, and device-token values are not committed.
+
+Validation:
+- Pending final verification for production build, tests, Rust check, backend typecheck, and installer build.
+
 # Axiom Workspace v1.4.0 — Command Layer
 
 Overview:

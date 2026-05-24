@@ -13,18 +13,19 @@ import type {
   DeviceIdentity,
   SetupChecklistItem,
   SetupState,
-  SetupStatus,
   SyncSettings,
   SyncStatus,
   RepoDiagnostics,
 } from "../types";
 import { PageHeader } from "../components/PageHeader";
+import type { SyncModeInfo } from "../lib/sync-mode";
 
 interface SettingsPageProps {
   setupState: SetupState;
   checklist: SetupChecklistItem[];
   settings: SyncSettings;
   syncStatus: SyncStatus;
+  syncInfo: SyncModeInfo;
   eventCount: number;
   appVersion: string;
   gitVersion: string;
@@ -89,6 +90,7 @@ export function SettingsPage({
   checklist,
   settings,
   syncStatus,
+  syncInfo,
   eventCount,
   appVersion,
   gitVersion,
@@ -111,11 +113,17 @@ export function SettingsPage({
   const [identityDraft, setIdentityDraft] = useState(setupState.identity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
-  const lastError = settings.lastSyncError || setupState.lastError || "No recent errors";
+  const lastError = settings.lastSyncError || settings.cloudSyncLastError || setupState.lastError || "No recent errors";
   
   const diagnostics = [
     { label: "App version", value: appVersion },
     { label: "Git version", value: gitVersion || "Not checked" },
+    { label: "Active sync mode", value: syncInfo.label },
+    { label: "Last sync source", value: syncInfo.lastSuccessfulSource },
+    { label: "Cloudflare endpoint", value: syncInfo.cloudConfigured ? "Configured" : "Not configured" },
+    { label: "Device token", value: syncInfo.tokenConfigured ? "Configured" : "Not configured" },
+    { label: "Backend health", value: syncInfo.backendHealth },
+    { label: "Last sync result", value: settings.lastSyncError || settings.cloudSyncLastError || settings.lastSyncStatus || syncInfo.detail },
     { label: "Installed projects", value: String(repoCount) },
     { label: "Registered projects", value: String(registeredProjectCount) },
     { label: "Active Sessions", value: String(activeSessionCount) },
@@ -196,13 +204,13 @@ export function SettingsPage({
               Cloud Sync
             </h3>
             <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-              settings.cloudSyncEndpoint && settings.cloudSyncDeviceToken
-                ? cloudSyncUnavailable ? "bg-status-dirty/10 text-status-dirty" : "bg-status-clean/10 text-status-clean"
-                : "bg-surface-2 text-text-muted"
+              syncInfo.mode === "cloud"
+                ? "bg-status-clean/10 text-status-clean"
+                : syncInfo.mode === "cloud_unavailable" || syncInfo.mode === "sync_failed"
+                  ? "bg-status-dirty/10 text-status-dirty"
+                  : "bg-surface-2 text-text-muted"
             }`}>
-              {settings.cloudSyncEndpoint && settings.cloudSyncDeviceToken
-                ? cloudSyncUnavailable ? "Unavailable" : "Configured"
-                : "Local mode"}
+              {syncInfo.label}
             </span>
           </div>
           <div className="grid grid-cols-1 gap-3">
@@ -215,19 +223,27 @@ export function SettingsPage({
                 placeholder="https://axiom-workspace-api.example.workers.dev"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Token</label>
-              <input
-                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-mono text-text-primary outline-none transition-all"
-                type="password"
-                value={settings.cloudSyncDeviceToken || ""}
-                onChange={(e) => onSettingsChange({ ...settings, cloudSyncDeviceToken: e.target.value.trim(), cloudSyncLastError: undefined })}
-                placeholder="Stored locally on this device"
-              />
+            <div className="flex items-center justify-between rounded-xl border border-border/15 bg-surface-2/20 p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device token</p>
+                <p className="mt-0.5 text-xs font-semibold text-text-primary">
+                  {syncInfo.tokenConfigured ? "Stored locally on this device" : "Not configured"}
+                </p>
+              </div>
+              <button
+                className="h-8 px-3 rounded-lg bg-surface-2 border border-border/40 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all"
+                onClick={() => {
+                  const token = window.prompt("Paste the device token for this desktop.");
+                  if (token !== null) onSettingsChange({ ...settings, cloudSyncDeviceToken: token.trim(), cloudSyncLastError: undefined });
+                }}
+              >
+                {syncInfo.tokenConfigured ? "Replace token" : "Register device"}
+              </button>
             </div>
           </div>
           <p className="text-[11px] text-text-muted leading-relaxed">
             Cloudflare stores workspace state only. Source code and Git credentials stay on this device.
+            {" "}Current mode: {syncInfo.label}. {syncInfo.detail}.
           </p>
         </section>
 

@@ -23,14 +23,14 @@ export function formatElapsed(startedAt: string): string {
 
 export function syncStatusLabel(status: string): string {
   const labels: Record<string, string> = {
-    idle: "Connected",
+    idle: "Local mode",
     checking: "Syncing",
     writing_local_events: "Syncing",
     pulling_updates: "Syncing",
     reading_shared_events: "Syncing",
     merging: "Syncing",
     pushing: "Syncing",
-    complete: "Synced",
+    complete: "Saved",
     error: "Sync Error",
   };
   return labels[status] || "Unknown";

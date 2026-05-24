@@ -275,6 +275,8 @@ export interface TrayWidgetState {
   recentEvents: TrayEventSummary[];
   boardSummary: TrayBoardSummary;
   syncStatus: SyncStatus;
+  syncLabel?: string;
+  syncDetail?: string;
   lastSyncAt?: string;
   currentUser: string;
 }

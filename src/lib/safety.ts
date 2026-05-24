@@ -1,5 +1,6 @@
 import type { LiveRepo, WorkSession } from "../types";
 import type { ProjectSafety, ProjectSafetyLabel, RegisteredProject } from "../types/workspace";
+import { normalizeDisplayName, samePerson } from "./identity";
 
 export function assessProjectSafety(
   repo: LiveRepo | null,
@@ -16,32 +17,39 @@ export function assessProjectSafety(
   }
 
   const mySessions = activeSessions.filter(
-    s => s.repoId === repo.id && s.userName.toLowerCase() === currentUser.toLowerCase(),
+    s => s.repoId === repo.id && samePerson(s.userName, currentUser),
   );
   if (mySessions.length > 0) {
-    return { label: "working_here", displayText: "Working here", canStart: false };
+    return { label: "working_here", displayText: "You are working here", canStart: false };
   }
 
   const teammateSessions = activeSessions.filter(
-    s => s.repoId === repo.id && s.userName.toLowerCase() !== currentUser.toLowerCase(),
+    s => s.repoId === repo.id && !samePerson(s.userName, currentUser),
   );
   if (teammateSessions.length > 0) {
-    const names = [...new Set(teammateSessions.map(s => s.userName))];
-    const firstName = names[0].split(" ")[0];
+    const names = [...new Set(teammateSessions.map(s => normalizeDisplayName(s.userName)))];
     return {
       label: "teammate_active",
-      displayText: "Review first",
-      teammate: firstName,
+      displayText: `${names[0]} active`,
+      teammate: names[0],
       canStart: true,
     };
   }
 
-  if (repo.behind > 0) {
-    return { label: "needs_sync", displayText: "Needs sync", canStart: true };
-  }
-
   if (repo.status === "error") {
     return { label: "status_unavailable", displayText: "Status unavailable", canStart: false };
+  }
+
+  if (repo.ahead > 0 && repo.behind > 0) {
+    return { label: "conflict", displayText: "Needs attention", canStart: false };
+  }
+
+  if (repo.behind > 0) {
+    return { label: "review_first", displayText: "Review first", canStart: true };
+  }
+
+  if (repo.changedFileCount > 0 || repo.hasUncommittedChanges || repo.isDetachedHead || !repo.currentBranch) {
+    return { label: "review_first", displayText: "Review first", canStart: true };
   }
 
   return { label: "safe_to_start", displayText: "Safe to start", canStart: true };

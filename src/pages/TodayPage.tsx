@@ -10,26 +10,29 @@ import {
 } from "lucide-react";
 import type {
   LiveRepo,
-  SetupState,
   SyncSettings,
   SyncStatus,
   WorkSession,
   WorkspaceEvent,
 } from "../types";
 import type { AttentionItem, RegisteredProject } from "../types/workspace";
+import type { SyncModeInfo } from "../lib/sync-mode";
 import { StartSessionModal } from "../components/StartSessionModal";
 import { FinishWorkModal } from "../components/FinishWorkModal";
 import { NeedsAttention } from "../components/NeedsAttention";
 import { computeAttentionItems } from "../lib/attention";
 import type { CreateSessionInput } from "../lib/sessions";
+import { humanizeActivityEvent } from "../lib/activity";
+import { normalizeDisplayName, samePerson } from "../lib/identity";
+import { formatChangedFiles } from "../lib/project-status";
 
 interface TodayPageProps {
   repos: LiveRepo[];
   activeSessions: WorkSession[];
   recentEvents: WorkspaceEvent[];
   defaultUserName: string;
-  setupState: SetupState;
   syncSettings: SyncSettings;
+  syncInfo: SyncModeInfo;
   syncStatus: SyncStatus;
   loading: boolean;
   registeredProjects: RegisteredProject[];
@@ -61,38 +64,13 @@ function durationLabel(startedAt: string): string {
   return `${hours}h ${minutes % 60}m`;
 }
 
-function normalizeTeammateName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.toLowerCase().startsWith("riley")) return "Riley";
-  const firstSpace = trimmed.indexOf(" ");
-  return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
-}
-
-function eventDescription(event: WorkspaceEvent): string {
-  const payload = event.payload as Record<string, unknown> | null;
-  if (!payload) return event.type.replace(/_/g, " ");
-  switch (event.type) {
-    case "session_created": {
-      const s = payload.session as { repoName?: string } | undefined;
-      return `started work on ${s?.repoName || "a project"}`;
-    }
-    case "session_ended": {
-      return payload.endNote ? `finished work — ${payload.endNote}` : "finished work";
-    }
-    case "sync_completed":
-      return "synced workspace";
-    default:
-      return event.type.replace(/_/g, " ");
-  }
-}
-
 export function TodayPage({
   repos,
   activeSessions,
   recentEvents,
   defaultUserName,
-  setupState,
   syncSettings,
+  syncInfo,
   syncStatus,
   loading,
   registeredProjects,
@@ -106,15 +84,15 @@ export function TodayPage({
   const [finishModalOpen, setFinishModalOpen] = useState(false);
 
   const myActiveSession = useMemo(
-    () => activeSessions.find(s => s.userName.toLowerCase() === defaultUserName.toLowerCase()),
+    () => activeSessions.find(s => samePerson(s.userName, defaultUserName)),
     [activeSessions, defaultUserName],
   );
 
   const teammates = useMemo(() => {
-    const others = activeSessions.filter(s => s.userName.toLowerCase() !== defaultUserName.toLowerCase());
+    const others = activeSessions.filter(s => !samePerson(s.userName, defaultUserName));
     const groups = new Map<string, WorkSession[]>();
     others.forEach(s => {
-      const norm = normalizeTeammateName(s.userName);
+      const norm = normalizeDisplayName(s.userName);
       const existing = groups.get(norm) || [];
       existing.push(s);
       groups.set(norm, existing);
@@ -134,7 +112,7 @@ export function TodayPage({
     return [...recentEvents]
       .filter(e => e.type === "session_created" || e.type === "session_ended")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 4);
+      .slice(0, 3);
   }, [recentEvents]);
 
   const myRepo = useMemo(() => {
@@ -144,7 +122,7 @@ export function TodayPage({
 
   return (
     <div className="flex-1 overflow-auto bg-surface-0">
-      <div className="max-w-2xl mx-auto p-6 md:p-8 space-y-6">
+      <div className="max-w-2xl mx-auto p-5 md:p-6 space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -157,7 +135,8 @@ export function TodayPage({
             <div className="flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-status-behind animate-pulse" : syncStatus === "error" ? "bg-status-locked" : "bg-status-clean"}`} />
               <span className="text-[10px] font-medium text-text-muted">
-                {cloudSyncUnavailable ? "Cloud sync unavailable" : syncing ? "Syncing" : `Synced ${timeAgo(syncSettings.lastSyncAt)}`}
+                {syncing ? "Syncing" : syncInfo.label}
+                <span className="text-text-muted/70"> · {syncInfo.detail}</span>
               </span>
             </div>
             <button
@@ -172,7 +151,7 @@ export function TodayPage({
 
         {/* Current Work Card */}
         {myActiveSession ? (
-          <div className="p-5 rounded-2xl border border-accent/20 bg-accent/5 space-y-4">
+          <div className="p-4 rounded-2xl border border-accent/20 bg-accent/5 space-y-3">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1.5">Current Work</p>
@@ -190,7 +169,7 @@ export function TodayPage({
                   </span>
                   {myRepo && myRepo.changedFileCount > 0 && (
                     <span className="text-[11px] font-medium text-status-dirty">
-                      {myRepo.changedFileCount} files changed
+                      {formatChangedFiles(myRepo.changedFileCount)}
                     </span>
                   )}
                 </div>
@@ -206,7 +185,7 @@ export function TodayPage({
             </button>
           </div>
         ) : (
-          <div className="p-5 rounded-2xl border border-border/20 bg-surface-1/40 space-y-4">
+          <div className="p-4 rounded-2xl border border-border/20 bg-surface-1/40 space-y-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Current Work</p>
               <p className="text-sm text-text-secondary">
@@ -225,7 +204,7 @@ export function TodayPage({
         )}
 
         {/* Team Card */}
-        <div className="p-4 rounded-2xl border border-border/20 bg-surface-1/40 space-y-3">
+        <div className="p-3.5 rounded-2xl border border-border/20 bg-surface-1/40 space-y-2.5">
           <div className="flex items-center gap-2">
             <Users size={13} className="text-text-muted" />
             <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Team</p>
@@ -239,7 +218,7 @@ export function TodayPage({
                     <p className="text-[11px] text-text-secondary mt-0.5 truncate">
                       {t.sessions.length === 1
                         ? <>Working on <span className="font-semibold text-text-primary">{t.sessions[0].repoName}</span></>
-                        : `${t.sessions.length} active sessions`}
+                        : `${t.sessions.length} active sessions on ${t.sessions[0].repoName}`}
                     </p>
                   </div>
                   <span className="text-[10px] text-text-muted tabular-nums shrink-0 ml-3">
@@ -254,7 +233,7 @@ export function TodayPage({
         </div>
 
         {/* Needs Attention */}
-        {attentionItems.length > 0 && (
+        {attentionItems.length > 0 ? (
           <div className="space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Needs Attention</p>
             <NeedsAttention
@@ -263,6 +242,10 @@ export function TodayPage({
                 if (item.projectId) onNavigate("projects");
               }}
             />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/15 bg-surface-1/25 px-3 py-2.5">
+            <p className="text-xs font-semibold text-text-secondary">Workspace clear</p>
           </div>
         )}
 
@@ -283,8 +266,7 @@ export function TodayPage({
                 <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-1/30 transition-colors">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-text-secondary truncate">
-                      <span className="font-bold text-text-primary">{event.userName}</span>{" "}
-                      {eventDescription(event)}
+                      {humanizeActivityEvent(event)}
                     </p>
                   </div>
                   <span className="text-[10px] text-text-muted shrink-0">{timeAgo(event.createdAt)}</span>

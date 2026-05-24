@@ -3,13 +3,11 @@ import {
   GitFork,
   Home,
   Settings,
-  Wifi,
-  WifiOff,
   Loader2,
-  AlertTriangle,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { NavPage, SyncSettings, SyncStatus } from "../types";
+import type { SyncModeInfo } from "../lib/sync-mode";
 import axiomMark from "/axiom-mark.png";
 
 const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
@@ -26,55 +24,7 @@ interface SidebarProps {
   activeSessionCount?: number;
   syncStatus?: SyncStatus;
   syncSettings?: SyncSettings;
-}
-
-function timeAgo(value?: string): string {
-  if (!value) return "Not synced yet";
-  const ms = Date.now() - new Date(value).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "Synced just now";
-  const min = Math.floor(ms / 60000);
-  if (min < 1) return "Synced just now";
-  if (min < 60) return `Synced ${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `Synced ${hr}h ago`;
-  return `Synced ${Math.floor(hr / 24)}d ago`;
-}
-
-function syncPresentation(setupComplete?: boolean, syncStatus?: SyncStatus) {
-  if (!setupComplete) {
-    return {
-      label: "Local only",
-      detail: "Connect sync when ready",
-      icon: <WifiOff size={12} />,
-      dot: "bg-status-dirty",
-      text: "text-status-dirty",
-    };
-  }
-  if (syncStatus === "error") {
-    return {
-      label: "Sync needs attention",
-      detail: "Open Settings to resolve",
-      icon: <AlertTriangle size={12} />,
-      dot: "bg-status-locked",
-      text: "text-status-locked",
-    };
-  }
-  if (syncStatus && syncStatus !== "idle" && syncStatus !== "complete") {
-    return {
-      label: "Syncing",
-      detail: "Sharing workspace state",
-      icon: <Loader2 size={12} className="animate-spin" />,
-      dot: "bg-status-behind",
-      text: "text-status-behind",
-    };
-  }
-  return {
-    label: "Connected",
-    detail: "Team sync active",
-    icon: <Wifi size={12} />,
-    dot: "bg-status-clean",
-    text: "text-status-clean",
-  };
+  syncInfo?: SyncModeInfo;
 }
 
 export function Sidebar({
@@ -84,10 +34,17 @@ export function Sidebar({
   activeSessionCount = 0,
   syncStatus,
   syncSettings,
+  syncInfo,
 }: SidebarProps) {
-  const sync = syncPresentation(setupComplete, syncStatus);
+  const sync = syncInfo ?? {
+    label: setupComplete ? "GitHub sync" : "Local mode",
+    detail: setupComplete && syncSettings?.lastSyncAt ? "Synced previously" : "Saved on this device",
+    dotClass: "bg-status-clean",
+    textClass: "text-status-clean",
+    isSyncing: Boolean(syncStatus && syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error"),
+  };
   return (
-    <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border/20 bg-surface-1 select-none">
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border/20 bg-surface-1 select-none">
       {/* Brand Header */}
       <div className="px-4 py-5">
         <div className="flex items-center gap-2.5">
@@ -127,13 +84,14 @@ export function Sidebar({
       <div className="p-3">
         <div className="rounded-xl border border-border/15 bg-surface-2/15 p-3 space-y-2">
           <div className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${sync.dot}`} />
-            <span className={`text-[9px] font-bold uppercase tracking-widest ${sync.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${sync.dotClass}`} />
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${sync.textClass}`}>
               {sync.label}
             </span>
           </div>
           <p className="text-[10px] text-text-muted font-medium truncate">
-            {setupComplete ? timeAgo(syncSettings?.lastSyncAt) : sync.detail}
+            {sync.isSyncing ? <Loader2 size={10} className="inline animate-spin" /> : null}
+            {sync.detail}
           </p>
         </div>
       </div>

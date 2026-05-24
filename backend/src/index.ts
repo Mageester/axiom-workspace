@@ -71,7 +71,7 @@ function matchRoute(
 // ─── Route Handlers ───────────────────────────────────────
 
 async function handleHealth(env: Env): Promise<Response> {
-  return json({ status: "ok", version: env.API_VERSION || "1.4.0" });
+  return json({ status: "ok", version: env.API_VERSION || "1.4.1" });
 }
 
 async function handleGetMe(
