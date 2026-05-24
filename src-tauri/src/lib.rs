@@ -11,6 +11,7 @@ pub fn run() {
             repos::get_multiple_repo_statuses,
             repos::discover_local_repos,
             repos::pull_repo,
+            repos::clone_repo,
             sync::check_git_installed,
             sync::validate_github_access,
             sync::get_default_sync_path,

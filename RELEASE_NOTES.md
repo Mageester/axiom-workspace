@@ -1,3 +1,41 @@
+# Axiom Workspace v1.3.1 — Interface Precision & Daily Polish
+
+Overview:
+Axiom Workspace v1.3.1 refines the Lean Daily Workspace release with tighter composition, cleaner navigation, compact project cards, grouped activity, polished settings, and a darker native desktop frame.
+
+This release focuses on making Workspace feel faster, calmer, and more useful for daily internal coordination between Aidan and Riley.
+
+Highlights:
+- Centered Today daily panel
+- Normalized teammate display and duplicate session grouping
+- Narrower, lighter sidebar
+- Compact Projects layout
+- Filesystem paths hidden by default
+- Expandable project diagnostics
+- Grouped chronological Activity timeline
+- Reduced automated sync noise
+- Polished Settings screen with custom toggles
+- Advanced options moved behind disclosure
+- Dark native Windows title bar
+- Version updated to 1.3.1
+
+Validation:
+- Production frontend build passed
+- TypeScript compilation passed
+- 51 Vitest tests passed
+- Existing tray/widget foundation preserved
+
+v1.3.1 Daily Use QA Checklist:
+- Open app and instantly understand current state
+- Start Work is obvious
+- Finish Work is obvious
+- Riley status feels trustworthy
+- Projects page is useful without being noisy
+- Activity page is helpful and not spammy
+- Tray widget still feels useful
+- Nothing feels annoying after repeated use
+
+
 # Axiom Workspace v1.3.0 — Lean Daily Workspace
 
 Status: Product-level UX simplification and performance polish.

@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import {
   Clock,
+  GitBranch,
+  Loader2,
   Play,
   RefreshCw,
+  Square,
   Users,
-  CheckCircle2,
-  AlertTriangle,
-  Loader2,
-  ArrowRight,
 } from "lucide-react";
 import type {
   LiveRepo,
@@ -17,10 +16,12 @@ import type {
   WorkSession,
   WorkspaceEvent,
 } from "../types";
+import type { AttentionItem, RegisteredProject } from "../types/workspace";
 import { StartSessionModal } from "../components/StartSessionModal";
-import { primaryBtnClass, secondaryBtnClass, iconBtnClass } from "../lib/constants";
+import { FinishWorkModal } from "../components/FinishWorkModal";
+import { NeedsAttention } from "../components/NeedsAttention";
+import { computeAttentionItems } from "../lib/attention";
 import type { CreateSessionInput } from "../lib/sessions";
-import { getSystemJudgment } from "../lib/intelligence";
 
 interface TodayPageProps {
   repos: LiveRepo[];
@@ -31,9 +32,10 @@ interface TodayPageProps {
   syncSettings: SyncSettings;
   syncStatus: SyncStatus;
   loading: boolean;
+  registeredProjects: RegisteredProject[];
   onSyncNow: () => Promise<void>;
   onStartSession: (input: CreateSessionInput) => void;
-  onFinishSession: (sessionId: string, endNote?: string) => void;
+  onFinishSession: (sessionId: string, summary?: string, details?: string) => void;
   onNavigate: (page: any) => void;
 }
 
@@ -42,7 +44,7 @@ function timeAgo(value?: string): string {
   const ms = Date.now() - new Date(value).getTime();
   if (!Number.isFinite(ms) || ms < 0) return "just now";
   const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 60) return "just now";
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m ago`;
   const hr = Math.floor(min / 60);
@@ -54,7 +56,33 @@ function durationLabel(startedAt: string): string {
   const minutes = Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000);
   if (minutes < 1) return "< 1m";
   if (minutes < 60) return `${minutes}m`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function normalizeTeammateName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.toLowerCase().startsWith("riley")) return "Riley";
+  const firstSpace = trimmed.indexOf(" ");
+  return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
+}
+
+function eventDescription(event: WorkspaceEvent): string {
+  const payload = event.payload as Record<string, unknown> | null;
+  if (!payload) return event.type.replace(/_/g, " ");
+  switch (event.type) {
+    case "session_created": {
+      const s = payload.session as { repoName?: string } | undefined;
+      return `started work on ${s?.repoName || "a project"}`;
+    }
+    case "session_ended": {
+      return payload.endNote ? `finished work — ${payload.endNote}` : "finished work";
+    }
+    case "sync_completed":
+      return "synced workspace";
+    default:
+      return event.type.replace(/_/g, " ");
+  }
 }
 
 export function TodayPage({
@@ -66,144 +94,203 @@ export function TodayPage({
   syncSettings,
   syncStatus,
   loading,
+  registeredProjects,
   onSyncNow,
   onStartSession,
   onFinishSession,
   onNavigate,
 }: TodayPageProps) {
   const [startModalOpen, setStartModalOpen] = useState(false);
+  const [finishModalOpen, setFinishModalOpen] = useState(false);
 
   const myActiveSession = useMemo(
     () => activeSessions.find(s => s.userName.toLowerCase() === defaultUserName.toLowerCase()),
-    [activeSessions, defaultUserName]
+    [activeSessions, defaultUserName],
   );
 
   const teammates = useMemo(() => {
     const others = activeSessions.filter(s => s.userName.toLowerCase() !== defaultUserName.toLowerCase());
-    // Dedupe by username
-    const unique = new Map<string, WorkSession>();
+    const groups = new Map<string, WorkSession[]>();
     others.forEach(s => {
-      if (!unique.has(s.userName.toLowerCase())) {
-        unique.set(s.userName.toLowerCase(), s);
-      }
+      const norm = normalizeTeammateName(s.userName);
+      const existing = groups.get(norm) || [];
+      existing.push(s);
+      groups.set(norm, existing);
     });
-    return Array.from(unique.values());
+    return Array.from(groups.entries()).map(([name, sessions]) => ({ name, sessions }));
   }, [activeSessions, defaultUserName]);
 
-  const systemJudgment = useMemo(() => getSystemJudgment(repos), [repos]);
+  const attentionItems = useMemo(
+    () => computeAttentionItems(repos, activeSessions, defaultUserName, registeredProjects),
+    [repos, activeSessions, defaultUserName, registeredProjects],
+  );
+
   const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
 
-  const healthStatus = useMemo(() => {
-    if (repos.length === 0) return { label: "No repos tracked", color: "text-text-muted" };
-    if (systemJudgment.needsReviewCount > 0) return { label: `${systemJudgment.needsReviewCount} issues found`, color: "text-status-dirty" };
-    return { label: "Workspace clear", color: "text-status-clean" };
-  }, [repos.length, systemJudgment.needsReviewCount]);
+  const recentImportant = useMemo(() => {
+    return [...recentEvents]
+      .filter(e => e.type === "session_created" || e.type === "session_ended")
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 4);
+  }, [recentEvents]);
+
+  const myRepo = useMemo(() => {
+    if (!myActiveSession) return null;
+    return repos.find(r => r.id === myActiveSession.repoId) ?? null;
+  }, [myActiveSession, repos]);
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-surface-0">
-      <main className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full px-8 py-12">
-        <div className="w-full space-y-16">
-          {/* Main Status Section */}
-          <div className="text-center space-y-6">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-hover opacity-80">
-              Axiom Workspace
-            </p>
-            
-            <div className="space-y-4">
-              <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-text-primary">
-                {myActiveSession ? (
-                  <>You are working on <span className="text-accent-hover">{myActiveSession.repoName}</span></>
-                ) : (
-                  "You are not working"
-                )}
-              </h1>
-              {myActiveSession && (
-                <p className="text-lg text-text-secondary">
-                  {myActiveSession.branch || "main"} · {durationLabel(myActiveSession.startedAt)}
-                </p>
-              )}
-            </div>
-
-            <div className="pt-4">
-              {myActiveSession ? (
-                <button
-                  className="h-14 px-10 rounded-full bg-surface-2 border border-border/50 text-text-primary font-medium hover:bg-surface-3 transition-all shadow-sm active:scale-95"
-                  onClick={() => onFinishSession(myActiveSession.id)}
-                >
-                  Finish Work
-                </button>
-              ) : (
-                <button
-                  className="h-14 px-10 rounded-full bg-accent text-white font-semibold hover:bg-accent-hover transition-all shadow-lg shadow-accent/20 active:scale-95 flex items-center gap-3 mx-auto"
-                  onClick={() => setStartModalOpen(true)}
-                  disabled={repos.length === 0}
-                >
-                  <Play size={18} fill="currentColor" />
-                  Start Work
-                </button>
-              )}
-            </div>
+    <div className="flex-1 overflow-auto bg-surface-0">
+      <div className="max-w-2xl mx-auto p-6 md:p-8 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Today</p>
+            <h1 className="text-lg font-bold text-text-primary mt-1 tracking-tight">
+              {myActiveSession ? "You are working" : "Ready to start"}
+            </h1>
           </div>
-
-          {/* Teammates Section */}
-          <div className="space-y-6">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-text-muted text-center">
-              Teammates
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {teammates.length > 0 ? (
-                teammates.map(session => (
-                  <div key={session.id} className="group p-5 rounded-2xl border border-border/50 bg-surface-1/50 flex items-center justify-between transition-all hover:bg-surface-1 hover:border-border">
-                    <div className="min-w-0">
-                      <p className="font-medium text-text-primary truncate">{session.userName} is working on {session.repoName}</p>
-                      <p className="text-sm text-text-secondary mt-1 truncate">{session.branch || "main"} · {durationLabel(session.startedAt)}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="md:col-span-2 py-8 rounded-2xl border border-dashed border-border/50 flex flex-col items-center justify-center text-text-muted">
-                  <Users size={20} className="mb-2 opacity-50" />
-                  <p className="text-sm">Riley is not active</p>
-                </div>
-              )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-status-behind animate-pulse" : syncStatus === "error" ? "bg-status-locked" : "bg-status-clean"}`} />
+              <span className="text-[10px] font-medium text-text-muted">
+                {syncing ? "Syncing" : `Synced ${timeAgo(syncSettings.lastSyncAt)}`}
+              </span>
             </div>
-          </div>
-
-          {/* Footer Status */}
-          <div className="pt-8 border-t border-border/30 flex flex-wrap items-center justify-between gap-8">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className={healthStatus.color} />
-                <span className={`text-sm font-medium ${healthStatus.color}`}>{healthStatus.label}</span>
-              </div>
-              <div className="flex items-center gap-2 text-text-muted">
-                <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-                <span className="text-sm">Synced {timeAgo(syncSettings.lastSyncAt)}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-               {systemJudgment.needsReviewCount > 0 && (
-                 <button 
-                  onClick={() => onNavigate("projects")}
-                  className="text-sm font-medium text-accent-hover hover:underline flex items-center gap-1"
-                 >
-                   View Details
-                   <ArrowRight size={14} />
-                 </button>
-               )}
-               <button
-                className="p-2 rounded-lg hover:bg-surface-2 text-text-muted transition-colors"
-                onClick={() => void onSyncNow()}
-                disabled={syncing || !setupState.setupComplete}
-                title="Sync Now"
-               >
-                 {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-               </button>
-            </div>
+            <button
+              className="p-1.5 rounded-lg hover:bg-surface-2 text-text-muted transition-colors"
+              onClick={() => void onSyncNow()}
+              disabled={syncing}
+            >
+              {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            </button>
           </div>
         </div>
-      </main>
+
+        {/* Current Work Card */}
+        {myActiveSession ? (
+          <div className="p-5 rounded-2xl border border-accent/20 bg-accent/5 space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1.5">Current Work</p>
+                <h2 className="text-base font-bold text-text-primary truncate">
+                  {myActiveSession.repoName}
+                </h2>
+                <div className="flex items-center gap-3 mt-1.5 text-text-muted">
+                  <span className="flex items-center gap-1 text-[11px] font-medium">
+                    <GitBranch size={11} />
+                    {myActiveSession.branch || "main"}
+                  </span>
+                  <span className="flex items-center gap-1 text-[11px] font-medium">
+                    <Clock size={11} />
+                    {durationLabel(myActiveSession.startedAt)}
+                  </span>
+                  {myRepo && myRepo.changedFileCount > 0 && (
+                    <span className="text-[11px] font-medium text-status-dirty">
+                      {myRepo.changedFileCount} files changed
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="h-10 px-6 rounded-xl bg-surface-2 border border-border/40 text-xs font-bold text-text-primary hover:bg-surface-3 transition-all active:scale-[0.98] flex items-center gap-2"
+              onClick={() => setFinishModalOpen(true)}
+            >
+              <Square size={12} fill="currentColor" />
+              Finish Work
+            </button>
+          </div>
+        ) : (
+          <div className="p-5 rounded-2xl border border-border/20 bg-surface-1/40 space-y-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Current Work</p>
+              <p className="text-sm text-text-secondary">
+                No active session. Pick a project to start working.
+              </p>
+            </div>
+            <button
+              className="h-10 px-6 rounded-xl bg-accent text-white text-xs font-bold hover:bg-accent-hover transition-all shadow-lg shadow-accent/15 active:scale-[0.98] flex items-center gap-2"
+              onClick={() => setStartModalOpen(true)}
+              disabled={repos.length === 0}
+            >
+              <Play size={12} fill="currentColor" />
+              Start Work
+            </button>
+          </div>
+        )}
+
+        {/* Team Card */}
+        <div className="p-4 rounded-2xl border border-border/20 bg-surface-1/40 space-y-3">
+          <div className="flex items-center gap-2">
+            <Users size={13} className="text-text-muted" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Team</p>
+          </div>
+          {teammates.length > 0 ? (
+            <div className="space-y-2">
+              {teammates.map(t => (
+                <div key={t.name} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2/20 border border-border/15">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-text-primary">{t.name}</p>
+                    <p className="text-[11px] text-text-secondary mt-0.5 truncate">
+                      {t.sessions.length === 1
+                        ? <>Working on <span className="font-semibold text-text-primary">{t.sessions[0].repoName}</span></>
+                        : `${t.sessions.length} active sessions`}
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-text-muted tabular-nums shrink-0 ml-3">
+                    {durationLabel(t.sessions[0].startedAt)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-text-muted py-2">No teammates active</p>
+          )}
+        </div>
+
+        {/* Needs Attention */}
+        {attentionItems.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Needs Attention</p>
+            <NeedsAttention
+              items={attentionItems}
+              onAction={(item) => {
+                if (item.projectId) onNavigate("projects");
+              }}
+            />
+          </div>
+        )}
+
+        {/* Recent Activity */}
+        {recentImportant.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Recent Activity</p>
+              <button
+                className="text-[10px] font-bold text-accent hover:text-accent-hover transition-colors"
+                onClick={() => onNavigate("activity")}
+              >
+                View All
+              </button>
+            </div>
+            <div className="space-y-1">
+              {recentImportant.map(event => (
+                <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-1/30 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-text-secondary truncate">
+                      <span className="font-bold text-text-primary">{event.userName}</span>{" "}
+                      {eventDescription(event)}
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-text-muted shrink-0">{timeAgo(event.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <StartSessionModal
         open={startModalOpen}
@@ -212,11 +299,23 @@ export function TodayPage({
         initialRepo={null}
         defaultUserName={defaultUserName}
         onClose={() => setStartModalOpen(false)}
-        onCreate={(input) => {
-          onStartSession(input);
-          setStartModalOpen(false);
-        }}
+        onCreate={(input) => { onStartSession(input); setStartModalOpen(false); }}
       />
+
+      {myActiveSession && (
+        <FinishWorkModal
+          open={finishModalOpen}
+          projectName={myActiveSession.repoName}
+          branch={myActiveSession.branch}
+          startedAt={myActiveSession.startedAt}
+          onClose={() => setFinishModalOpen(false)}
+          onFinish={(summary, details) => {
+            const endNote = [summary, details].filter(Boolean).join("\n\n");
+            onFinishSession(myActiveSession.id, summary, details);
+            setFinishModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

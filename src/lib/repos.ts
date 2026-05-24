@@ -194,3 +194,14 @@ export interface PullResult {
 export async function pullRepo(path: string): Promise<PullResult> {
   return invoke<PullResult>("pull_repo", { path });
 }
+
+export interface CloneResult {
+  ok: boolean;
+  message: string;
+  localPath: string;
+  durationMs: number;
+}
+
+export async function cloneRepo(repoUrl: string, parentDir: string, folderName: string): Promise<CloneResult> {
+  return invoke<CloneResult>("clone_repo", { repoUrl, parentDir, folderName });
+}

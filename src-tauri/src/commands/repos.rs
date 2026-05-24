@@ -120,6 +120,20 @@ impl RepoCheckContext {
             }
         }
     }
+
+    fn git_command_cwd(&self, cwd: &str, args: &[&str]) -> Result<String, String> {
+        match process::run_command("git", args, Some(Path::new(cwd)), Duration::from_secs(120)) {
+            Ok(output) => Ok(output.stdout),
+            Err(error) => {
+                let message = if matches!(error.kind, process::ProcessErrorKind::NotFound) {
+                    "Git is not installed or not found on PATH".to_string()
+                } else {
+                    error.user_message()
+                };
+                Err(message)
+            }
+        }
+    }
 }
 
 fn now_unix_secs() -> String {
@@ -681,6 +695,69 @@ pub fn discover_local_repos() -> Vec<DiscoveredRepo> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     repos
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneResult {
+    pub ok: bool,
+    pub message: String,
+    pub local_path: String,
+    pub duration_ms: u128,
+}
+
+fn clone_repo_inner(repo_url: &str, parent_dir: &str, folder_name: &str) -> CloneResult {
+    let started = Instant::now();
+    let target = Path::new(parent_dir).join(folder_name);
+
+    if target.exists() {
+        return CloneResult {
+            ok: false,
+            message: format!("Folder already exists: {}", target.display()),
+            local_path: target.to_string_lossy().to_string(),
+            duration_ms: started.elapsed().as_millis(),
+        };
+    }
+
+    if !Path::new(parent_dir).exists() {
+        if let Err(e) = fs::create_dir_all(parent_dir) {
+            return CloneResult {
+                ok: false,
+                message: format!("Could not create parent directory: {}", e),
+                local_path: String::new(),
+                duration_ms: started.elapsed().as_millis(),
+            };
+        }
+    }
+
+    let ctx = GitContext::new();
+    let target_str = target.to_string_lossy().to_string();
+
+    match ctx.git_command_cwd(
+        parent_dir,
+        &["clone", "--depth", "1", repo_url, folder_name],
+    ) {
+        Ok(_output) => CloneResult {
+            ok: true,
+            message: format!("Successfully cloned {} into {}", repo_url, folder_name),
+            local_path: target_str,
+            duration_ms: started.elapsed().as_millis(),
+        },
+        Err(e) => CloneResult {
+            ok: false,
+            message: format!(
+                "Unable to clone this repo. Check that Git is installed and that this device has access to the repository. Error: {}",
+                e
+            ),
+            local_path: String::new(),
+            duration_ms: started.elapsed().as_millis(),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn clone_repo(repo_url: String, parent_dir: String, folder_name: String) -> CloneResult {
+    clone_repo_inner(&repo_url, &parent_dir, &folder_name)
 }
 
 #[cfg(test)]

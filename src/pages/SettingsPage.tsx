@@ -19,7 +19,6 @@ import type {
   RepoDiagnostics,
 } from "../types";
 import { PageHeader } from "../components/PageHeader";
-import { fieldClass, labelClass, primaryBtnClass, secondaryBtnClass } from "../lib/constants";
 
 interface SettingsPageProps {
   setupState: SetupState;
@@ -44,17 +43,9 @@ interface SettingsPageProps {
   onResetDismissedSuggestions: () => void;
 }
 
-const statusCopy: Record<SetupStatus, string> = {
-  complete: "Done",
-  missing: "Not found",
-  needs_action: "Action needed",
-  error: "Problem",
-  checking: "Checking...",
-};
-
 function formatDateTime(value?: string): string {
   if (!value) {
-    return "Not synced yet";
+    return "never";
   }
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
@@ -64,47 +55,31 @@ function formatDateTime(value?: string): string {
   }).format(new Date(value));
 }
 
-function formatDuration(value?: number): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "Not recorded yet";
-  }
-  if (value < 1000) {
-    return `${Math.round(value)} ms`;
-  }
-  return `${(value / 1000).toFixed(1)} s`;
+// Sleek CSS Interactive Toggle Switch Component
+interface SwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
 }
 
-function syncStatusLabel(status: SyncStatus): string {
-  switch (status) {
-    case "checking":
-      return "Checking...";
-    case "writing_local_events":
-      return "Saving your changes...";
-    case "pulling_updates":
-      return "Getting team updates...";
-    case "reading_shared_events":
-      return "Reading team activity...";
-    case "merging":
-      return "Combining updates...";
-    case "pushing":
-      return "Sharing with team...";
-    case "complete":
-      return "Up to date";
-    case "error":
-      return "Needs attention";
-    default:
-      return "Ready";
-  }
-}
-
-function StatusIcon({ status }: { status: SetupStatus }) {
-  if (status === "complete") {
-    return <CheckCircle2 size={15} className="text-status-clean" />;
-  }
-  if (status === "checking") {
-    return <Loader2 size={15} className="animate-spin text-accent" />;
-  }
-  return <AlertCircle size={15} className="text-status-dirty" />;
+function Switch({ checked, onChange }: SwitchProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ease-in-out focus:outline-none ${
+        checked ? "bg-accent" : "bg-surface-3 border border-border/20"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-150 ease-in-out ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
 }
 
 export function SettingsPage({
@@ -130,20 +105,16 @@ export function SettingsPage({
   onResetDismissedSuggestions,
 }: SettingsPageProps) {
   const [identityDraft, setIdentityDraft] = useState(setupState.identity);
-  const [repoUrlDraft, setRepoUrlDraft] = useState(settings.syncRepoUrl);
-  const [syncPathDraft, setSyncPathDraft] = useState(settings.syncLocalPath);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const syncing =
-    syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
-  const lastError =
-    settings.lastSyncError || setupState.lastError || "No recent errors";
+  const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
+  const lastError = settings.lastSyncError || setupState.lastError || "No recent errors";
   
   const diagnostics = [
     { label: "App version", value: appVersion },
     { label: "Git version", value: gitVersion || "Not checked" },
-    { label: "Repos", value: String(repoCount) },
-    { label: "Active", value: String(activeSessionCount) },
-    { label: "Events", value: String(eventCount) },
+    { label: "Tracked Repos", value: String(repoCount) },
+    { label: "Active Sessions", value: String(activeSessionCount) },
+    { label: "Logged Events", value: String(eventCount) },
     { label: "Last sync", value: formatDateTime(settings.lastSyncAt) },
   ];
 
@@ -161,40 +132,50 @@ export function SettingsPage({
     }
   }
 
+  const isIdentityChanged = 
+    identityDraft.userName.trim() !== setupState.identity.userName ||
+    identityDraft.deviceName.trim() !== setupState.identity.deviceName;
+
   return (
-    <div className="flex-1 overflow-auto bg-surface-0">
+    <div className="flex-1 overflow-auto bg-surface-0 select-none">
       <PageHeader
         eyebrow="Preferences"
         title="Settings"
         description="Configure your identity and workspace automation."
       />
 
-      <main className="max-w-4xl mx-auto p-8 space-y-12">
-        {/* Identity Section */}
-        <section className="space-y-6">
+      <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-8">
+        {/* 1. Identity Section */}
+        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-text-muted">
-              Identity
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+              Identity Profile
             </h3>
-            <button className="text-xs font-semibold text-accent-hover hover:underline" onClick={saveIdentity}>
-              Save changes
-            </button>
+            {isIdentityChanged && (
+              <button 
+                className="text-xs font-bold text-accent hover:text-accent-hover transition-colors flex items-center gap-1" 
+                onClick={saveIdentity}
+              >
+                <Save size={12} />
+                Save Changes
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-text-secondary">Display Name</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Display Name</label>
               <input
-                className="w-full h-11 px-4 rounded-xl bg-surface-1 border border-border/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all"
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all"
                 value={identityDraft.userName}
                 onChange={(e) => setIdentityDraft({ ...identityDraft, userName: e.target.value })}
                 placeholder="Riley"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-text-secondary">Device Name</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Name</label>
               <input
-                className="w-full h-11 px-4 rounded-xl bg-surface-1 border border-border/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all"
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all"
                 value={identityDraft.deviceName}
                 onChange={(e) => setIdentityDraft({ ...identityDraft, deviceName: e.target.value })}
                 placeholder="Riley Laptop"
@@ -203,133 +184,133 @@ export function SettingsPage({
           </div>
         </section>
 
-        {/* Automation Section */}
-        <section className="space-y-6">
-          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-text-muted">
-            Automation
+        {/* 2. Automation Section */}
+        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+            Workspace Automation
           </h3>
           
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-1/50 border border-border/40">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-text-primary">Auto-refresh project status</p>
-                <p className="text-xs text-text-muted mt-0.5">Keep repo states fresh while working</p>
+          <div className="space-y-3">
+            {/* Auto refresh project status */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2/20 border border-border/15 hover:bg-surface-2/30 transition-colors">
+              <div className="min-w-0 pr-4">
+                <p className="text-xs font-bold text-text-primary">Auto-refresh project status</p>
+                <p className="text-[11px] text-text-muted mt-0.5">Keep repo states fresh while working</p>
               </div>
-              <input
-                type="checkbox"
+              <Switch
                 checked={settings.autoRefreshReposEnabled}
-                onChange={(e) => onSettingsChange({ ...settings, autoRefreshReposEnabled: e.target.checked })}
-                className="w-5 h-5 accent-accent"
+                onChange={(checked) => onSettingsChange({ ...settings, autoRefreshReposEnabled: checked })}
               />
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-1/50 border border-border/40">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-text-primary">Auto-sync changes</p>
-                <p className="text-xs text-text-muted mt-0.5">Share work status with the team automatically</p>
+            {/* Auto sync changes */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2/20 border border-border/15 hover:bg-surface-2/30 transition-colors">
+              <div className="min-w-0 pr-4">
+                <p className="text-xs font-bold text-text-primary">Auto-sync changes</p>
+                <p className="text-[11px] text-text-muted mt-0.5">Share work status with the team automatically</p>
               </div>
-              <input
-                type="checkbox"
+              <Switch
                 checked={settings.autoSyncEnabled}
-                onChange={(e) => onSettingsChange({ ...settings, autoSyncEnabled: e.target.checked })}
-                className="w-5 h-5 accent-accent"
+                onChange={(checked) => onSettingsChange({ ...settings, autoSyncEnabled: checked })}
               />
             </div>
           </div>
         </section>
 
-        {/* Diagnostics Summary */}
-        <section className="space-y-6">
-          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-text-muted">
-            Health & Diagnostics
+        {/* 3. Health & Diagnostics Summary */}
+        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+            Workspace Diagnostics
           </h3>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {diagnostics.map(item => (
-              <div key={item.label} className="p-4 rounded-2xl bg-surface-1/50 border border-border/40">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{item.label}</p>
-                <p className="text-sm font-medium text-text-primary mt-1 truncate">{item.value}</p>
+              <div key={item.label} className="p-3 rounded-xl bg-surface-2/25 border border-border/15">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-text-muted">{item.label}</p>
+                <p className="text-xs font-bold text-text-primary mt-1 truncate">{item.value}</p>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 pt-2">
             <button
-              className="h-10 px-4 rounded-xl bg-surface-2 border border-border/50 text-xs font-semibold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-2"
+              className="h-8.5 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
               onClick={() => void onSyncNow()}
               disabled={syncing}
             >
-              {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               Sync Now
             </button>
             <button
-              className="h-10 px-4 rounded-xl bg-surface-2 border border-border/50 text-xs font-semibold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-2"
+              className="h-8.5 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
               onClick={() => void onValidateSetup()}
             >
-              <CheckCircle2 size={14} />
+              <CheckCircle2 size={12} />
               Validate Setup
             </button>
           </div>
         </section>
 
-        {/* Advanced Section */}
-        <section className="pt-8 border-t border-border/30">
+        {/* 4. Advanced (Secondary/System information) */}
+        <section className="pt-4 border-t border-border/20">
           <button
-            className="flex items-center gap-2 text-text-muted hover:text-text-primary transition-colors"
+            className="flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors outline-none"
             onClick={() => setAdvancedOpen(!advancedOpen)}
           >
-            {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <span className="text-xs font-bold uppercase tracking-wider">Advanced Settings</span>
+            {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <span className="text-[9px] font-bold uppercase tracking-widest">Advanced Configuration</span>
           </button>
 
           {advancedOpen && (
-            <div className="mt-8 space-y-10 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="space-y-6">
-                 <div className="grid grid-cols-1 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-secondary">Sync Repo URL</label>
-                    <input className="w-full h-11 px-4 rounded-xl bg-surface-1 border border-border/50 text-text-muted font-mono text-xs" value={settings.syncRepoUrl} readOnly />
+            <div className="mt-4 space-y-4 animate-slide-in">
+              <div className="p-4 rounded-xl border border-border/20 bg-surface-1/25 space-y-3">
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Sync Repo Remote URL</label>
+                    <input className="w-full h-8 px-2.5 rounded bg-surface-2 border border-border/40 text-text-secondary font-mono text-[10px]" value={settings.syncRepoUrl} readOnly />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-secondary">Local Sync path</label>
-                    <input className="w-full h-11 px-4 rounded-xl bg-surface-1 border border-border/50 text-text-muted font-mono text-xs" value={settings.syncLocalPath} readOnly />
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-text-muted">Local Sync Folder path</label>
+                    <input className="w-full h-8 px-2.5 rounded bg-surface-2 border border-border/40 text-text-secondary font-mono text-[10px]" value={settings.syncLocalPath} readOnly />
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                 <h4 className="text-xs font-bold uppercase tracking-wider text-status-locked">Danger Zone</h4>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <button
-                      className="h-10 px-4 rounded-xl bg-status-locked/5 border border-status-locked/20 text-xs font-medium text-status-locked hover:bg-status-locked/10 transition-all text-left"
-                      onClick={() => confirmReset("Full reset local app data? This clears all local state and reloads the app.", onFullLocalReset)}
-                    >
-                      Full Local Reset
-                    </button>
-                    <button
-                      className="h-10 px-4 rounded-xl bg-status-locked/5 border border-status-locked/20 text-xs font-medium text-status-locked hover:bg-status-locked/10 transition-all text-left"
-                      onClick={() => confirmReset("Reset sync state? This disconnects the app from the sync repo.", onResetSyncState)}
-                    >
-                      Reset Sync State
-                    </button>
-                    <button
-                      className="h-10 px-4 rounded-xl bg-status-locked/5 border border-status-locked/20 text-xs font-medium text-status-locked hover:bg-status-locked/10 transition-all text-left"
-                      onClick={() => confirmReset("Reset work and claimed areas?", onResetSessionsAndLocks)}
-                    >
-                      Reset Sessions & Locks
-                    </button>
-                    <button
-                      className="h-10 px-4 rounded-xl bg-status-locked/5 border border-status-locked/20 text-xs font-medium text-status-locked hover:bg-status-locked/10 transition-all text-left"
-                      onClick={() => confirmReset("Reset setup and reconnect?", onResetSetup)}
-                    >
-                      Reconnect Setup
-                    </button>
-                 </div>
+              {/* Danger Zone */}
+              <div className="p-4 rounded-xl border border-status-locked/15 bg-status-locked/5 space-y-3">
+                <h4 className="text-[9px] font-bold uppercase tracking-widest text-status-locked">Danger Zone</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <button
+                    className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
+                    onClick={() => confirmReset("Full reset local app data? This clears all local state and reloads the app.", onFullLocalReset)}
+                  >
+                    Full Local Reset
+                  </button>
+                  <button
+                    className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
+                    onClick={() => confirmReset("Reset sync state? This disconnects the app from the sync repo.", onResetSyncState)}
+                  >
+                    Reset Sync State
+                  </button>
+                  <button
+                    className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
+                    onClick={() => confirmReset("Reset work and claimed areas?", onResetSessionsAndLocks)}
+                  >
+                    Reset Sessions & Locks
+                  </button>
+                  <button
+                    className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
+                    onClick={() => confirmReset("Reset setup and reconnect?", onResetSetup)}
+                  >
+                    Reconnect Setup
+                  </button>
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-surface-1/30 border border-border/30">
-                 <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-2">Last System Error</p>
-                 <p className="text-xs font-mono text-status-locked break-all">{lastError}</p>
+              {/* Logs */}
+              <div className="p-3.5 rounded-xl border border-border/20 bg-surface-1/20 font-mono">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Last System Error</p>
+                <p className="text-[10px] text-status-locked break-all leading-relaxed">{lastError}</p>
               </div>
             </div>
           )}

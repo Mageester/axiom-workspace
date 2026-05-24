@@ -65,6 +65,15 @@ function NotificationToast({ notification, onDismiss, onClickMain }: Notificatio
   );
 }
 
+function normalizeTeammateName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.toLowerCase().startsWith("riley")) {
+    return "Riley";
+  }
+  const firstSpace = trimmed.indexOf(" ");
+  return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
+}
+
 export interface TrayWidgetProps {
   state: TrayWidgetState;
   notifications: TrayNotification[];
@@ -162,7 +171,7 @@ export function TrayWidget({
                 {otherSessions.map(s => (
                   <div key={s.id} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-text-primary truncate">{s.userName}</p>
+                      <p className="text-[11px] font-semibold text-text-primary truncate">{normalizeTeammateName(s.userName)}</p>
                       <p className="text-[10px] text-text-muted truncate">{s.repoName}</p>
                     </div>
                     <span className="text-[10px] font-medium text-text-muted tabular-nums">
