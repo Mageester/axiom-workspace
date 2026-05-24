@@ -71,12 +71,13 @@ import type { CommandItem, HandoffNote, RegisteredProject } from "./types/worksp
 import { humanizeActivityEvent } from "./lib/activity";
 import { normalizeDisplayName, samePerson } from "./lib/identity";
 import { getSyncModeInfo } from "./lib/sync-mode";
+import { openProjectFolder, openProjectInCode, openProjectTerminal } from "./lib/project-actions";
 
 import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMainWindow, createWidgetWindow, broadcastWidgetState, broadcastNotification } from "./lib/tray";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.5.0";
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
 
@@ -333,6 +334,11 @@ function App() {
       unlisteners.push(u1);
       const u2 = await listen("widget:open-main", () => { void openMainWindow(); });
       unlisteners.push(u2);
+      const u3 = await listen("widget:finish-current", () => {
+        const current = sessionsRef.current.find((session) => samePerson(session.userName, setupStateRef.current.identity.userName) && session.status === "active");
+        if (current) finishSession(current.id);
+      });
+      unlisteners.push(u3);
     })();
     let unlistenClose: (() => void) | undefined;
     void (async () => {
@@ -700,6 +706,18 @@ function App() {
     }
   }
 
+  async function runProjectOpenAction(action: "code" | "folder" | "terminal", path: string) {
+    const result =
+      action === "code"
+        ? await openProjectInCode(path)
+        : action === "folder"
+          ? await openProjectFolder(path)
+          : await openProjectTerminal(path);
+    if (!result.ok && result.message) {
+      window.alert(result.message);
+    }
+  }
+
   async function addRegisteredProject(name: string, repoUrl: string, defaultBranch: string) {
     const projectInput: Omit<RegisteredProject, "id" | "createdAt" | "updatedAt"> = {
       name,
@@ -779,7 +797,49 @@ function App() {
     const mySession = activeSessions.find((session) => samePerson(session.userName, setupState.identity.userName));
     const missingProject = registeredProjects.find((project) => project.installStatus === "not_installed");
     const firstRepo = repos[0];
+    const projectCommands = repos.flatMap((repo): CommandItem[] => {
+      const displayName = repoNicknames[repo.path] || repo.name;
+      return [
+        {
+          id: `open-code-${repo.id}`,
+          label: `Open ${displayName}`,
+          description: "Open in VS Code",
+          category: "project",
+          action: () => void runProjectOpenAction("code", repo.path),
+          keywords: ["code", "vscode", repo.name],
+        },
+        {
+          id: `start-${repo.id}`,
+          label: `Start work on ${displayName}`,
+          description: repo.currentBranch || "main",
+          category: "work",
+          action: () => startSession({
+            repoId: repo.id,
+            repoName: displayName,
+            repoPath: repo.path,
+            userName: setupState.identity.userName,
+            title: `Work on ${displayName}`,
+            notes: "",
+            branch: repo.currentBranch,
+            targets: [{ id: `${repo.id}-general`, type: "area", value: "general work" }],
+          }),
+          keywords: ["start", "session", repo.name],
+        },
+      ];
+    });
+    const cloneCommands = registeredProjects
+      .filter((project) => project.installStatus === "not_installed")
+      .map((project): CommandItem => ({
+        id: `clone-${project.id}`,
+        label: `Clone ${project.name}`,
+        description: "Clone missing project",
+        category: "project",
+        action: () => void cloneRegisteredProject(project),
+        keywords: ["clone", "latest", project.name],
+      }));
     return [
+      ...projectCommands,
+      ...cloneCommands,
       {
         id: "start-work",
         label: "Start work",
@@ -818,6 +878,22 @@ function App() {
         keywords: ["latest", "install", "repo"],
       },
       {
+        id: "view-needs-attention",
+        label: "View Needs Attention",
+        description: "Action inbox",
+        category: "navigation",
+        action: () => setActiveNav("today"),
+        keywords: ["review", "attention", "warnings"],
+      },
+      {
+        id: "configure-cloud-sync",
+        label: "Configure Cloud Sync",
+        description: syncInfo.label,
+        category: "system",
+        action: () => setActiveNav("settings"),
+        keywords: ["cloudflare", "sync", "settings"],
+      },
+      {
         id: "sync-now",
         label: "Sync now",
         description: syncInfo.label,
@@ -854,14 +930,14 @@ function App() {
         action: () => setActiveNav("settings"),
       },
     ];
-  }, [activeSessions, syncInfo.label, registeredProjects, repos, setupState.identity.userName, refreshAll]);
+  }, [activeSessions, syncInfo.label, registeredProjects, repos, repoNicknames, setupState.identity.userName, refreshAll]);
 
   function renderPage() {
     switch (activeNav) {
       case "today":
-        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} syncSettings={syncSettings} syncInfo={syncInfo} syncStatus={syncStatus} loading={loading} registeredProjects={registeredProjects} cloudSyncUnavailable={cloudSyncUnavailable} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onNavigate={setActiveNav} />;
+        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} syncSettings={syncSettings} syncInfo={syncInfo} syncStatus={syncStatus} loading={loading} registeredProjects={registeredProjects} cloudSyncUnavailable={cloudSyncUnavailable} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onCloneProject={cloneRegisteredProject} onOpenInCode={(path) => runProjectOpenAction("code", path)} onOpenFolder={(path) => runProjectOpenAction("folder", path)} onOpenTerminal={(path) => runProjectOpenAction("terminal", path)} onNavigate={setActiveNav} />;
       case "projects":
-        return <ProjectsPage repos={repos} registeredProjects={registeredProjects} repoNicknames={repoNicknames} activeSessions={activeSessions} loading={loading} refreshingPaths={refreshingPaths} pullingPaths={pullingPaths} onRefreshAll={refreshAll} onRefreshRepo={refreshRepo} onAddRepo={addRepo} onAddProject={addRegisteredProject} onCloneProject={cloneRegisteredProject} onRemoveRepo={removeRepo} onRenameRepo={setRepoNickname} onStartSession={startSession} onFinishSession={finishSession} onPullRepo={handlePullRepo} getRepoSessions={r => activeSessions.filter(s => s.repoId === r.id)} defaultUserName={setupState.identity.userName} />;
+        return <ProjectsPage repos={repos} registeredProjects={registeredProjects} repoNicknames={repoNicknames} activeSessions={activeSessions} loading={loading} refreshingPaths={refreshingPaths} pullingPaths={pullingPaths} onRefreshAll={refreshAll} onRefreshRepo={refreshRepo} onAddRepo={addRepo} onAddProject={addRegisteredProject} onCloneProject={cloneRegisteredProject} onRemoveRepo={removeRepo} onRenameRepo={setRepoNickname} onStartSession={startSession} onFinishSession={finishSession} onPullRepo={handlePullRepo} onOpenInCode={(path) => runProjectOpenAction("code", path)} onOpenFolder={(path) => runProjectOpenAction("folder", path)} onOpenTerminal={(path) => runProjectOpenAction("terminal", path)} getRepoSessions={r => activeSessions.filter(s => s.repoId === r.id)} defaultUserName={setupState.identity.userName} />;
       case "activity":
         return <ActivityPage events={events} syncSettings={syncSettings} repoDiagnostics={repoDiagnostics} handoffNotes={handoffNotes} />;
       case "settings":

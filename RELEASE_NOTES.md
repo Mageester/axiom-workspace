@@ -1,3 +1,30 @@
+# Axiom Workspace v1.5.0 — Workspace Experience Rewrite
+
+Overview:
+v1.5.0 rewrites the visible Workspace experience from a dashboard into a daily desktop command launcher for Axiom work.
+
+Highlights:
+- New Home/Now command surface with current work, primary action, sync mode, and Ctrl+K visibility
+- Project Launcher redesign with compact rows instead of large status cards
+- First-class project open actions for VS Code, folder, and terminal
+- Clearer action recommendations for review, clone, configure, and attention workflows
+- Improved Needs Attention inbox with grouped Riley session copy and recommended actions
+- Streamlined Start Work and Finish Work flow with optional handoff notes preserved
+- Stronger command palette visibility with grouped launcher commands
+- Better sync mode clarity across Home and Settings
+- Improved visual density, row hover states, status chips, and desktop-app polish
+- Preserved Cloudflare backend foundation
+- Preserved local-first mode and graceful operation without Cloudflare configured
+- Preserved tray/widget behavior with a more focused current-work widget and quick finish
+
+Backend notes:
+- No new backend system was added.
+- Cloudflare remains optional and local-first mode remains the default fallback.
+- Source code, filesystem paths, secrets, and device tokens remain hidden by default in user-facing surfaces.
+
+Validation:
+- Pending final verification for production build, tests, Rust check, backend typecheck, Tauri info, installer build, diff check, and secret scan.
+
 # Axiom Workspace v1.4.1 — Command Layer Hardening
 
 Overview:

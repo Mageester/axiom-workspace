@@ -152,9 +152,9 @@ export function SettingsPage({
   return (
     <div className="flex-1 overflow-auto bg-surface-0 select-none">
       <PageHeader
-        eyebrow="Preferences"
+        eyebrow="Workspace control"
         title="Settings"
-        description="Configure your identity and workspace automation."
+        description="Profile, sync mode, cloud setup, automation, diagnostics, and advanced local controls."
       />
 
       <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-8">
@@ -197,11 +197,11 @@ export function SettingsPage({
           </div>
         </section>
 
-        {/* 2. Cloud Sync Section */}
+        {/* 2. Sync Mode Section */}
         <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
-              Cloud Sync
+              Sync Mode
             </h3>
             <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
               syncInfo.mode === "cloud"
@@ -212,6 +212,18 @@ export function SettingsPage({
             }`}>
               {syncInfo.label}
             </span>
+          </div>
+          <div className="rounded-xl border border-border/15 bg-surface-2/20 p-3">
+            <p className="text-sm font-bold text-text-primary">{syncInfo.label}</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+              {syncInfo.mode === "local"
+                ? "Workspace is saved on this device. Cloud sync is not configured."
+                : syncInfo.mode === "github"
+                  ? "Workspace state is syncing through the legacy GitHub layer."
+                  : syncInfo.mode === "cloud"
+                    ? "Connected to the workspace API."
+                    : `${syncInfo.detail}. Workspace remains usable in local-first mode.`}
+            </p>
           </div>
           <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
@@ -243,7 +255,6 @@ export function SettingsPage({
           </div>
           <p className="text-[11px] text-text-muted leading-relaxed">
             Cloudflare stores workspace state only. Source code and Git credentials stay on this device.
-            {" "}Current mode: {syncInfo.label}. {syncInfo.detail}.
           </p>
         </section>
 

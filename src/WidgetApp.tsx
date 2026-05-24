@@ -68,6 +68,12 @@ export default function WidgetApp() {
     );
   }, []);
 
+  const handleFinishCurrent = useCallback(() => {
+    void import("@tauri-apps/api/event").then(({ emit }) =>
+      emit("widget:finish-current")
+    );
+  }, []);
+
   const handleClose = useCallback(async () => {
     const win = getCurrentWindow();
     await win.hide();
@@ -84,6 +90,7 @@ export default function WidgetApp() {
         onClose={handleClose}
         onSyncNow={handleSyncNow}
         onOpenMainWindow={handleOpenMainWindow}
+        onFinishCurrent={handleFinishCurrent}
         onDismissNotification={dismissNotification}
       />
     </div>

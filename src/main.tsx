@@ -3,7 +3,15 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./index.css";
 
-const label = getCurrentWindow().label;
+function getWindowLabel(): string {
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return "main";
+  }
+}
+
+const label = getWindowLabel();
 
 async function renderApp() {
   if (label === "tray-widget") {

@@ -84,20 +84,20 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[16vh] bg-black/65 backdrop-blur-md animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-border/40 bg-surface-1 shadow-2xl overflow-hidden animate-slide-in"
+        className="w-full max-w-2xl rounded-2xl border border-border/45 bg-surface-1/95 shadow-2xl overflow-hidden animate-slide-in"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-border/20">
           <Search size={16} className="text-text-muted shrink-0" />
           <input
             ref={inputRef}
             type="text"
-            placeholder="Type a command..."
-            className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+            placeholder="Open project, start work, clone, refresh..."
+            className="flex-1 bg-transparent text-base text-text-primary outline-none placeholder:text-text-muted"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -107,13 +107,16 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
           </kbd>
         </div>
 
-        <div className="max-h-72 overflow-y-auto py-2">
+        <div className="max-h-[420px] overflow-y-auto py-3">
           {grouped.length === 0 ? (
-            <div className="px-4 py-8 text-center text-xs text-text-muted">No commands found</div>
+            <div className="px-4 py-12 text-center">
+              <p className="text-sm font-semibold text-text-primary">No command found</p>
+              <p className="mt-1 text-xs text-text-muted">Try a project name, “start”, “clone”, or “sync”.</p>
+            </div>
           ) : (
             grouped.map(group => (
               <div key={group.category}>
-                <div className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-text-muted">
+                <div className="px-5 py-1.5 text-[10px] font-bold text-text-muted">
                   {categoryLabels[group.category]}
                 </div>
                 {group.items.map(cmd => {
@@ -122,8 +125,8 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                   return (
                     <button
                       key={cmd.id}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        isSelected ? "bg-accent/10 text-text-primary" : "text-text-secondary hover:bg-surface-2/50"
+                      className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
+                        isSelected ? "bg-accent/12 text-text-primary" : "text-text-secondary hover:bg-surface-2/50"
                       }`}
                       onClick={() => {
                         onClose();
@@ -131,9 +134,10 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                       }}
                       onMouseEnter={() => setSelectedIndex(thisIndex)}
                     >
-                      <span className="flex-1 text-xs font-semibold">{cmd.label}</span>
+                      <Command size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                      <span className="flex-1 text-sm font-semibold">{cmd.label}</span>
                       {cmd.description && (
-                        <span className="text-[10px] text-text-muted truncate max-w-[140px]">
+                        <span className="text-[11px] text-text-muted truncate max-w-[220px]">
                           {cmd.description}
                         </span>
                       )}

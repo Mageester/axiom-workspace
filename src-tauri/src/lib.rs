@@ -1,6 +1,6 @@
 mod commands;
 
-use commands::{repos, sync, system};
+use commands::{project_actions, repos, sync, system};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,6 +12,7 @@ pub fn run() {
             repos::discover_local_repos,
             repos::pull_repo,
             repos::clone_repo,
+            project_actions::open_project_action,
             sync::check_git_installed,
             sync::validate_github_access,
             sync::get_default_sync_path,

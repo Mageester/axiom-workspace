@@ -1,12 +1,16 @@
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  Check,
   Clock,
+  Code2,
+  FolderOpen,
   GitBranch,
   Loader2,
   Play,
   RefreshCw,
   Square,
-  Users,
+  Terminal,
 } from "lucide-react";
 import type {
   LiveRepo,
@@ -17,14 +21,14 @@ import type {
 } from "../types";
 import type { AttentionItem, RegisteredProject } from "../types/workspace";
 import type { SyncModeInfo } from "../lib/sync-mode";
-import { StartSessionModal } from "../components/StartSessionModal";
+import type { CreateSessionInput } from "../lib/sessions";
 import { FinishWorkModal } from "../components/FinishWorkModal";
 import { NeedsAttention } from "../components/NeedsAttention";
 import { computeAttentionItems } from "../lib/attention";
-import type { CreateSessionInput } from "../lib/sessions";
 import { humanizeActivityEvent } from "../lib/activity";
 import { normalizeDisplayName, samePerson } from "../lib/identity";
 import { formatChangedFiles } from "../lib/project-status";
+import { getRepoDisplayName } from "../lib/repos";
 
 interface TodayPageProps {
   repos: LiveRepo[];
@@ -40,20 +44,25 @@ interface TodayPageProps {
   onSyncNow: () => Promise<void>;
   onStartSession: (input: CreateSessionInput) => void;
   onFinishSession: (sessionId: string, summary?: string, details?: string) => void;
+  onCloneProject: (project: RegisteredProject) => Promise<void>;
+  onOpenInCode: (path: string) => Promise<void>;
+  onOpenFolder: (path: string) => Promise<void>;
+  onOpenTerminal: (path: string) => Promise<void>;
   onNavigate: (page: any) => void;
 }
 
-function timeAgo(value?: string): string {
-  if (!value) return "never";
-  const ms = Date.now() - new Date(value).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "just now";
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
+interface LauncherItem {
+  id: string;
+  name: string;
+  branch: string;
+  status: string;
+  detail: string;
+  repo?: LiveRepo;
+  project?: RegisteredProject;
+  session?: WorkSession;
+  teammateSession?: WorkSession;
+  needsReview: boolean;
+  cloneRequired: boolean;
 }
 
 function durationLabel(startedAt: string): string {
@@ -62,6 +71,73 @@ function durationLabel(startedAt: string): string {
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${minutes % 60}m`;
+}
+
+function timeAgo(value?: string): string {
+  if (!value) return "never";
+  const ms = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function buildLauncherItems(
+  repos: LiveRepo[],
+  projects: RegisteredProject[],
+  sessions: WorkSession[],
+  currentUser: string,
+): LauncherItem[] {
+  const byPath = new Map(projects.map((project) => [project.localPath?.toLowerCase(), project]));
+  const installedPaths = new Set(repos.map((repo) => repo.path.toLowerCase()));
+  const repoItems = repos.map((repo): LauncherItem => {
+    const mySession = sessions.find((session) => session.repoId === repo.id && samePerson(session.userName, currentUser));
+    const teammateSession = sessions.find((session) => session.repoId === repo.id && !samePerson(session.userName, currentUser));
+    const dirty = repo.changedFileCount > 0;
+    const needsReview = repo.status === "error" || repo.ahead > 0 || repo.behind > 0 || repo.changedFileCount > 0 || Boolean(teammateSession);
+    let status = "Safe to start";
+    if (mySession) status = "Working here";
+    else if (repo.status === "error") status = "Needs attention";
+    else if (teammateSession) status = `${normalizeDisplayName(teammateSession.userName)} active`;
+    else if (needsReview) status = "Review first";
+
+    return {
+      id: repo.id,
+      name: getRepoDisplayName(repo),
+      branch: repo.currentBranch || "main",
+      status,
+      detail: dirty ? formatChangedFiles(repo.changedFileCount) : repo.status === "clean" ? "Ready" : repo.status,
+      repo,
+      project: byPath.get(repo.path.toLowerCase()),
+      session: mySession,
+      teammateSession,
+      needsReview,
+      cloneRequired: false,
+    };
+  });
+
+  const missingItems = projects
+    .filter((project) => project.installStatus === "not_installed" || (project.localPath && !installedPaths.has(project.localPath.toLowerCase())))
+    .map((project): LauncherItem => ({
+      id: project.id,
+      name: project.name,
+      branch: project.defaultBranch || "main",
+      status: "Clone required",
+      detail: "Missing on this device",
+      project,
+      needsReview: false,
+      cloneRequired: true,
+    }));
+
+  return [...repoItems, ...missingItems].sort((a, b) => {
+    if (a.session && !b.session) return -1;
+    if (!a.session && b.session) return 1;
+    if (a.cloneRequired !== b.cloneRequired) return a.cloneRequired ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export function TodayPage({
@@ -78,214 +154,236 @@ export function TodayPage({
   onSyncNow,
   onStartSession,
   onFinishSession,
+  onCloneProject,
+  onOpenInCode,
+  onOpenFolder,
+  onOpenTerminal,
   onNavigate,
 }: TodayPageProps) {
-  const [startModalOpen, setStartModalOpen] = useState(false);
   const [finishModalOpen, setFinishModalOpen] = useState(false);
+  const [reviewItem, setReviewItem] = useState<LauncherItem | null>(null);
 
   const myActiveSession = useMemo(
-    () => activeSessions.find(s => samePerson(s.userName, defaultUserName)),
+    () => activeSessions.find((session) => samePerson(session.userName, defaultUserName)),
     [activeSessions, defaultUserName],
   );
-
-  const teammates = useMemo(() => {
-    const others = activeSessions.filter(s => !samePerson(s.userName, defaultUserName));
-    const groups = new Map<string, WorkSession[]>();
-    others.forEach(s => {
-      const norm = normalizeDisplayName(s.userName);
-      const existing = groups.get(norm) || [];
-      existing.push(s);
-      groups.set(norm, existing);
-    });
-    return Array.from(groups.entries()).map(([name, sessions]) => ({ name, sessions }));
-  }, [activeSessions, defaultUserName]);
-
+  const myRepo = useMemo(
+    () => myActiveSession ? repos.find((repo) => repo.id === myActiveSession.repoId) ?? null : null,
+    [myActiveSession, repos],
+  );
+  const launcherItems = useMemo(
+    () => buildLauncherItems(repos, registeredProjects, activeSessions, defaultUserName),
+    [repos, registeredProjects, activeSessions, defaultUserName],
+  );
   const attentionItems = useMemo(
-    () => computeAttentionItems(repos, activeSessions, defaultUserName, registeredProjects, syncSettings, cloudSyncUnavailable),
+    () => computeAttentionItems(repos, activeSessions, defaultUserName, registeredProjects, syncSettings, cloudSyncUnavailable).slice(0, 3),
     [repos, activeSessions, defaultUserName, registeredProjects, syncSettings, cloudSyncUnavailable],
+  );
+  const recentImportant = useMemo(
+    () => [...recentEvents]
+      .filter((event) => event.type !== "sync_completed" && event.type !== "snapshot_created")
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 3),
+    [recentEvents],
   );
 
   const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
-  const hasProjects = repos.length > 0 || registeredProjects.length > 0;
+  const suggestedItem = launcherItems.find((item) => !item.cloneRequired && !item.session) ?? launcherItems[0];
 
-  const recentImportant = useMemo(() => {
-    return [...recentEvents]
-      .filter(e => e.type === "session_created" || e.type === "session_ended")
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 3);
-  }, [recentEvents]);
+  function startItem(item: LauncherItem, force = false) {
+    if (!item.repo) return;
+    if (item.needsReview && !force) {
+      setReviewItem(item);
+      return;
+    }
+    onStartSession({
+      repoId: item.repo.id,
+      repoName: item.name,
+      repoPath: item.repo.path,
+      userName: defaultUserName,
+      title: `Work on ${item.name}`,
+      notes: "",
+      branch: item.repo.currentBranch,
+      targets: [{ id: `${item.repo.id}-general`, type: "area", value: "general work" }],
+    });
+    setReviewItem(null);
+  }
 
-  const myRepo = useMemo(() => {
-    if (!myActiveSession) return null;
-    return repos.find(r => r.id === myActiveSession.repoId) ?? null;
-  }, [myActiveSession, repos]);
+  function primaryAction(item: LauncherItem) {
+    if (item.session) {
+      setFinishModalOpen(true);
+    } else if (item.cloneRequired && item.project) {
+      void onCloneProject(item.project);
+    } else if (item.needsReview) {
+      setReviewItem(item);
+    } else {
+      startItem(item);
+    }
+  }
 
   return (
     <div className="flex-1 overflow-auto bg-surface-0">
-      <div className="max-w-2xl mx-auto p-5 md:p-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Today</p>
-            <h1 className="text-lg font-bold text-text-primary mt-1 tracking-tight">
-              {myActiveSession ? "You are working" : "Ready to start"}
-            </h1>
+      <div className="sticky top-0 z-20 border-b border-border/25 bg-surface-0/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+          <div className="min-w-0">
+            <h1 className="text-sm font-bold text-text-primary">Axiom Workspace</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+              <span className={`h-1.5 w-1.5 rounded-full ${syncInfo.dotClass}`} />
+              <span>{syncInfo.label}</span>
+              <span className="text-text-muted/50">/</span>
+              <span>{syncInfo.detail}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-status-behind animate-pulse" : syncStatus === "error" ? "bg-status-locked" : "bg-status-clean"}`} />
-              <span className="text-[10px] font-medium text-text-muted">
-                {syncing ? "Syncing" : syncInfo.label}
-                <span className="text-text-muted/70"> · {syncInfo.detail}</span>
-              </span>
-            </div>
+            <kbd className="hidden rounded-md border border-border/50 bg-surface-2 px-2 py-1 text-[10px] font-bold text-text-secondary sm:inline">Ctrl+K</kbd>
             <button
-              className="p-1.5 rounded-lg hover:bg-surface-2 text-text-muted transition-colors"
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-border/40 bg-surface-1 px-3 text-[11px] font-bold text-text-primary hover:bg-surface-2"
               onClick={() => void onSyncNow()}
               disabled={syncing}
             >
-              {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Refresh
             </button>
           </div>
         </div>
-
-        {/* Current Work Card */}
-        {myActiveSession ? (
-          <div className="p-4 rounded-2xl border border-accent/20 bg-accent/5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1.5">Current Work</p>
-                <h2 className="text-base font-bold text-text-primary truncate">
-                  {myActiveSession.repoName}
-                </h2>
-                <div className="flex items-center gap-3 mt-1.5 text-text-muted">
-                  <span className="flex items-center gap-1 text-[11px] font-medium">
-                    <GitBranch size={11} />
-                    {myActiveSession.branch || "main"}
-                  </span>
-                  <span className="flex items-center gap-1 text-[11px] font-medium">
-                    <Clock size={11} />
-                    {durationLabel(myActiveSession.startedAt)}
-                  </span>
-                  {myRepo && myRepo.changedFileCount > 0 && (
-                    <span className="text-[11px] font-medium text-status-dirty">
-                      {formatChangedFiles(myRepo.changedFileCount)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <button
-              className="h-10 px-6 rounded-xl bg-surface-2 border border-border/40 text-xs font-bold text-text-primary hover:bg-surface-3 transition-all active:scale-[0.98] flex items-center gap-2"
-              onClick={() => setFinishModalOpen(true)}
-            >
-              <Square size={12} fill="currentColor" />
-              Finish Work
-            </button>
-          </div>
-        ) : (
-          <div className="p-4 rounded-2xl border border-border/20 bg-surface-1/40 space-y-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Current Work</p>
-              <p className="text-sm text-text-secondary">
-                {hasProjects ? "No active session. Pick a project to start working." : "Workspace clear. Add a project when you are ready."}
-              </p>
-            </div>
-            <button
-              className="h-10 px-6 rounded-xl bg-accent text-white text-xs font-bold hover:bg-accent-hover transition-all shadow-lg shadow-accent/15 active:scale-[0.98] flex items-center gap-2"
-              onClick={() => setStartModalOpen(true)}
-              disabled={repos.length === 0}
-            >
-              <Play size={12} fill="currentColor" />
-              Start Work
-            </button>
-          </div>
-        )}
-
-        {/* Team Card */}
-        <div className="p-3.5 rounded-2xl border border-border/20 bg-surface-1/40 space-y-2.5">
-          <div className="flex items-center gap-2">
-            <Users size={13} className="text-text-muted" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Team</p>
-          </div>
-          {teammates.length > 0 ? (
-            <div className="space-y-2">
-              {teammates.map(t => (
-                <div key={t.name} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2/20 border border-border/15">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-text-primary">{t.name}</p>
-                    <p className="text-[11px] text-text-secondary mt-0.5 truncate">
-                      {t.sessions.length === 1
-                        ? <>Working on <span className="font-semibold text-text-primary">{t.sessions[0].repoName}</span></>
-                        : `${t.sessions.length} active sessions on ${t.sessions[0].repoName}`}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-text-muted tabular-nums shrink-0 ml-3">
-                    {durationLabel(t.sessions[0].startedAt)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-text-muted py-2">No teammates active</p>
-          )}
-        </div>
-
-        {/* Needs Attention */}
-        {attentionItems.length > 0 ? (
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Needs Attention</p>
-            <NeedsAttention
-              items={attentionItems}
-              onAction={(item) => {
-                if (item.projectId) onNavigate("projects");
-              }}
-            />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-border/15 bg-surface-1/25 px-3 py-2.5">
-            <p className="text-xs font-semibold text-text-secondary">Workspace clear</p>
-          </div>
-        )}
-
-        {/* Recent Activity */}
-        {recentImportant.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Recent Activity</p>
-              <button
-                className="text-[10px] font-bold text-accent hover:text-accent-hover transition-colors"
-                onClick={() => onNavigate("activity")}
-              >
-                View All
-              </button>
-            </div>
-            <div className="space-y-1">
-              {recentImportant.map(event => (
-                <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-1/30 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-text-secondary truncate">
-                      {humanizeActivityEvent(event)}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-text-muted shrink-0">{timeAgo(event.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      <StartSessionModal
-        open={startModalOpen}
-        repos={repos}
-        activeSessions={activeSessions}
-        initialRepo={null}
-        defaultUserName={defaultUserName}
-        onClose={() => setStartModalOpen(false)}
-        onCreate={(input) => { onStartSession(input); setStartModalOpen(false); }}
-      />
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-2xl border border-border/30 bg-surface-1/70 p-5 shadow-2xl shadow-black/20">
+            <p className="text-[11px] font-bold text-text-muted">Now</p>
+            {myActiveSession ? (
+              <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0">
+                  <h2 className="text-2xl font-semibold tracking-tight text-text-primary">You are working on {myActiveSession.repoName}</h2>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+                    <span className="flex items-center gap-1.5"><GitBranch size={14} />{myActiveSession.branch || "main"}</span>
+                    <span className="flex items-center gap-1.5"><Clock size={14} />{durationLabel(myActiveSession.startedAt)}</span>
+                    {myRepo && myRepo.changedFileCount > 0 && <span className="text-status-dirty">{formatChangedFiles(myRepo.changedFileCount)}</span>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="h-10 rounded-xl bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => setFinishModalOpen(true)}>
+                    <Square size={12} className="mr-1.5 inline" fill="currentColor" />Finish Work
+                  </button>
+                  {myRepo && <button className="h-10 rounded-xl border border-border/40 bg-surface-2 px-4 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenInCode(myRepo.path)}><Code2 size={13} className="mr-1.5 inline" />Open in VS Code</button>}
+                  {myRepo && <button className="h-10 rounded-xl border border-border/40 bg-surface-2 px-4 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenTerminal(myRepo.path)}><Terminal size={13} className="mr-1.5 inline" />Terminal</button>}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-text-primary">You are not working</h2>
+                  <p className="mt-2 text-sm text-text-secondary">
+                    {suggestedItem ? `Start from ${suggestedItem.name}, or pick any project below.` : "Add your first Axiom project to begin."}
+                  </p>
+                </div>
+                {suggestedItem && !suggestedItem.cloneRequired && (
+                  <button className="h-10 rounded-xl bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => startItem(suggestedItem)}>
+                    <Play size={13} className="mr-1.5 inline" fill="currentColor" />Start Work
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-border/25 bg-surface-1/45 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11px] font-bold text-text-muted">Next</p>
+              {attentionItems.length > 0 && <button className="text-[11px] font-bold text-accent" onClick={() => onNavigate("projects")}>Review all</button>}
+            </div>
+            {attentionItems.length > 0 ? (
+              <NeedsAttention items={attentionItems} onAction={(item: AttentionItem) => item.actionLabel === "Open settings" ? onNavigate("settings") : onNavigate("projects")} />
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl border border-border/15 bg-surface-2/20 p-3">
+                <Check size={15} className="text-status-clean" />
+                <div>
+                  <p className="text-xs font-bold text-text-primary">Workspace clear</p>
+                  <p className="mt-0.5 text-[11px] text-text-muted">No action needed before starting.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border/25 bg-surface-1/45">
+          <div className="flex items-center justify-between border-b border-border/20 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-bold text-text-primary">Project Launcher</h2>
+              <p className="mt-0.5 text-[11px] text-text-muted">Open, start, finish, review, or clone without leaving Home.</p>
+            </div>
+            {loading && <Loader2 size={14} className="animate-spin text-text-muted" />}
+          </div>
+          <div className="divide-y divide-border/15">
+            {launcherItems.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm font-semibold text-text-primary">Add your first Axiom project</p>
+                <p className="mt-2 text-xs text-text-muted">Projects appear here as launchable rows once registered or discovered.</p>
+              </div>
+            ) : launcherItems.map((item) => (
+              <div key={item.id} className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition hover:bg-surface-2/25">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-text-primary">{item.name}</p>
+                  <p className="mt-1 truncate text-[11px] text-text-muted">{item.status} · {item.detail}</p>
+                </div>
+                <div className="hidden min-w-0 items-center gap-2 text-[11px] text-text-secondary md:flex">
+                  <GitBranch size={12} />
+                  <span className="truncate">{item.branch}</span>
+                  {item.teammateSession && <span className="truncate text-status-dirty">{normalizeDisplayName(item.teammateSession.userName)}</span>}
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  {item.repo && <button title="Open in VS Code" className="hidden h-8 w-8 place-items-center rounded-lg text-text-muted hover:bg-surface-3 hover:text-text-primary md:grid" onClick={() => void onOpenInCode(item.repo!.path)}><Code2 size={14} /></button>}
+                  {item.repo && <button title="Open folder" className="hidden h-8 w-8 place-items-center rounded-lg text-text-muted hover:bg-surface-3 hover:text-text-primary md:grid" onClick={() => void onOpenFolder(item.repo!.path)}><FolderOpen size={14} /></button>}
+                  <button
+                    className={`h-8 rounded-lg px-3 text-[11px] font-bold ${item.needsReview && !item.session ? "bg-status-dirty/10 text-status-dirty hover:bg-status-dirty/15" : "bg-accent text-white hover:bg-accent-hover"}`}
+                    onClick={() => primaryAction(item)}
+                  >
+                    {item.session ? "Finish" : item.cloneRequired ? "Clone Latest" : item.needsReview ? "Review" : "Start"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {recentImportant.length > 0 && (
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[11px] font-bold text-text-muted">Recent</h2>
+              <button className="text-[11px] font-bold text-accent" onClick={() => onNavigate("activity")}>Activity</button>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {recentImportant.map((event) => (
+                <div key={event.id} className="rounded-xl border border-border/15 bg-surface-1/35 px-3 py-2.5">
+                  <p className="truncate text-xs text-text-secondary">{humanizeActivityEvent(event)}</p>
+                  <p className="mt-1 text-[10px] text-text-muted">{timeAgo(event.createdAt)}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      {reviewItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm" onClick={() => setReviewItem(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-border/40 bg-surface-1 p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex gap-3">
+              <AlertTriangle size={18} className="mt-0.5 text-status-dirty" />
+              <div>
+                <h2 className="text-sm font-bold text-text-primary">Review before starting</h2>
+                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                  {reviewItem.name} is marked {reviewItem.status.toLowerCase()}. {reviewItem.detail}.
+                  {reviewItem.teammateSession ? ` ${normalizeDisplayName(reviewItem.teammateSession.userName)} is active on this project.` : ""}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="h-9 rounded-lg border border-border/40 bg-surface-2 px-4 text-xs font-bold text-text-secondary hover:bg-surface-3" onClick={() => setReviewItem(null)}>Cancel</button>
+              <button className="h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => startItem(reviewItem, true)}>Start anyway</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {myActiveSession && (
         <FinishWorkModal
@@ -295,7 +393,6 @@ export function TodayPage({
           startedAt={myActiveSession.startedAt}
           onClose={() => setFinishModalOpen(false)}
           onFinish={(summary, details) => {
-            const endNote = [summary, details].filter(Boolean).join("\n\n");
             onFinishSession(myActiveSession.id, summary, details);
             setFinishModalOpen(false);
           }}

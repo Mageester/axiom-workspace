@@ -70,6 +70,7 @@ export interface TrayWidgetProps {
   onClose: () => void;
   onSyncNow: () => void;
   onOpenMainWindow: () => void;
+  onFinishCurrent: () => void;
   onDismissNotification: (id: string) => void;
 }
 
@@ -82,6 +83,7 @@ export function TrayWidget({
   onClose,
   onSyncNow,
   onOpenMainWindow,
+  onFinishCurrent,
   onDismissNotification,
 }: TrayWidgetProps) {
   const [tick, setTick] = useState(0);
@@ -149,6 +151,12 @@ export function TrayWidget({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-accent">Working</p>
                 <p className="text-sm font-semibold text-text-primary truncate">{mySession.repoName}</p>
                 <p className="text-[11px] text-text-muted">{mySession.branch || "main"} · {formatElapsed(mySession.startedAt)}</p>
+                <button
+                  className="mt-3 h-8 rounded-lg bg-accent px-3 text-[10px] font-bold text-white hover:bg-accent-hover"
+                  onClick={onFinishCurrent}
+                >
+                  Quick Finish
+                </button>
               </div>
             ) : (
               <div className="py-2">
@@ -178,6 +186,12 @@ export function TrayWidget({
                   </div>
                 )})}
               </div>
+            </div>
+          )}
+
+          {teammates.length === 0 && (
+            <div className="rounded-xl border border-border/20 bg-surface-2/20 px-3 py-2">
+              <p className="text-[10px] font-semibold text-text-muted">Riley inactive</p>
             </div>
           )}
         </div>

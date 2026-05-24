@@ -33,7 +33,7 @@ export function NeedsAttention({ items, onAction }: NeedsAttentionProps) {
       {items.slice(0, 5).map(item => (
         <div
           key={item.id}
-          className={`flex items-start gap-3 p-3 rounded-xl bg-surface-2/20 border ${severityBorder(item.severity)} transition-colors hover:bg-surface-2/30`}
+          className={`flex flex-col gap-3 p-3 rounded-xl bg-surface-2/20 border ${severityBorder(item.severity)} transition-colors hover:bg-surface-2/30 sm:flex-row sm:items-start`}
         >
           <div className="mt-0.5">
             <SeverityIcon severity={item.severity} />
@@ -44,7 +44,7 @@ export function NeedsAttention({ items, onAction }: NeedsAttentionProps) {
           </div>
           {item.actionLabel && onAction && (
             <button
-              className="shrink-0 text-[10px] font-bold text-accent hover:text-accent-hover transition-colors mt-0.5"
+              className="w-fit shrink-0 text-[10px] font-bold text-accent hover:text-accent-hover transition-colors mt-0.5"
               onClick={() => onAction(item)}
             >
               {item.actionLabel}

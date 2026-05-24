@@ -127,8 +127,8 @@ export function computeAttentionItems(
     const elapsed = Date.now() - new Date(session.startedAt).getTime();
     const hours = elapsed / (1000 * 60 * 60);
     if (hours > 6) {
-      const user = normalizeDisplayName(session.userName);
-      const key = `${user.toLowerCase()}-${session.repoId}`;
+    const user = normalizeDisplayName(session.userName);
+    const key = `${user.toLowerCase()}-${session.repoId}`;
       longSessions.set(key, [...(longSessions.get(key) || []), session]);
     }
   }
@@ -143,6 +143,7 @@ export function computeAttentionItems(
         ? `${sessions[0].repoName} · ${sessions.length} sessions · longest ${longestHours}h`
         : `${sessions[0].repoName} · ${longestHours}h`,
       severity: "info",
+      actionLabel: "Review",
       projectId: sessions[0].repoId,
     });
   }
