@@ -133,9 +133,9 @@ export function ActivityPage({ events }: ActivityPageProps) {
   return (
     <div className="flex-1 overflow-auto bg-surface-0">
       <PageHeader
-        eyebrow="Timeline"
+        eyebrow="Workspace log"
         title="Activity"
-        description="A quiet history of what's been happening in the workspace."
+        description="High-signal work, sync, repo, and handoff events."
       />
 
       <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-6">
@@ -157,7 +157,7 @@ export function ActivityPage({ events }: ActivityPageProps) {
 
         {groupedEvents.length === 0 ? (
           <div className="py-20 text-center border border-dashed border-border/20 rounded-2xl">
-            <p className="text-xs text-text-muted">No activity found</p>
+            <p className="text-xs text-text-muted">No matching activity yet.</p>
           </div>
         ) : (
           <div className="space-y-6">

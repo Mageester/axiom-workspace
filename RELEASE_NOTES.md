@@ -1,3 +1,31 @@
+# Axiom Workspace v1.5.2 — Private Workspace Polish
+
+Overview:
+v1.5.2 tightens the private internal workspace experience without changing the local-first architecture or product direction.
+
+Highlights:
+- clearer onboarding language focused on private coordination
+- Home private status marker and readiness summary cards
+- clearer priority language for blockers and review items
+- improved Project Launcher responsiveness on narrow screens
+- Projects overview counts for safe, review, active, and missing installs
+- clearer project empty state explaining coordination-only scope
+- Settings copy tightened around sync readiness and private scope
+- Activity copy tightened into a high-signal workspace log
+- sidebar brand clarified as Axiom Workspace with private marker
+- browser-only native shell errors now use a clear setup message
+- browser preview no longer initializes Tauri tray and widget APIs
+- private web companion version copy updated and decorative orb backgrounds removed
+- app, package, backend, and Tauri versions aligned to v1.5.2
+
+Validation:
+- `npm run build` passed
+- `npm run test` passed: 7 test files, 58 tests
+- `cd web && npm run build` passed
+- Browser smoke passed for onboarding, Home, Projects, Activity, Settings, and private web companion
+- no root `lint` or separate `typecheck` script exists
+- Tauri shell, installer build, and Rust checks still require native release QA
+
 # Axiom Workspace v1.5.1 — Experience Finish
 
 Overview:

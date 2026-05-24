@@ -71,16 +71,16 @@ export function OnboardingPage({
               Axiom <span className="text-accent">Workspace</span>
             </h1>
             <p className="text-lg text-text-secondary leading-relaxed max-w-md">
-              A premium coordination layer for elite engineering teams. Secure, local-first, and effortless.
+              Private coordination for Axiom projects. Track work claims, sync status, and repo readiness without moving source code.
             </p>
           </div>
           
           <div className="p-6 rounded-2xl border border-border/40 bg-surface-1/50 flex gap-4">
              <ShieldCheck className="text-status-clean shrink-0" size={24} />
              <div className="space-y-1">
-                <p className="text-sm font-semibold text-text-primary">Source Code Privacy</p>
+                <p className="text-sm font-semibold text-text-primary">Private by default</p>
                 <p className="text-xs text-text-muted leading-relaxed">
-                  Only coordination metadata is shared. Your actual source code never leaves your machine.
+                  Sync shares coordination metadata only. Source code and credentials stay on this device.
                 </p>
              </div>
           </div>

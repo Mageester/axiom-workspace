@@ -146,9 +146,9 @@ export function SettingsPage({
   return (
     <div className="flex-1 overflow-auto bg-surface-0 select-none">
       <PageHeader
-        eyebrow="Workspace control"
+        eyebrow="Private workspace"
         title="Settings"
-        description="Profile, sync mode, cloud setup, automation, diagnostics, and advanced local controls."
+        description="Identity, sync readiness, automation, diagnostics, and local reset controls."
       />
 
       <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-8">
@@ -211,14 +211,14 @@ export function SettingsPage({
           {/* Sync Mode Status Control Card */}
           <div className="rounded-xl border border-border/15 bg-surface-2/20 p-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-bold text-text-primary">Sync Mode</p>
+              <p className="text-xs font-bold text-text-primary">Sync readiness</p>
               <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
                 {syncInfo.mode === "local"
-                  ? "Workspace state is saved on this device. Cloud synchronization is not configured."
+                  ? "Workspace state is saved on this device. Team sync is not configured."
                   : syncInfo.mode === "github"
-                    ? "Workspace state is syncing through the legacy GitHub layer."
+                    ? "Workspace state is syncing through the GitHub coordination repo."
                     : syncInfo.mode === "cloud"
-                      ? "Connected to the secure Cloudflare workspace API."
+                      ? "Connected to the Cloudflare workspace API."
                       : `${syncInfo.detail}. Workspace remains usable in local-first mode.`}
               </p>
             </div>
@@ -259,7 +259,7 @@ export function SettingsPage({
           </div>
 
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Cloudflare stores workspace state only. Source code and Git credentials stay on this device.
+            Private scope: sync stores coordination state only. Source code, local repo contents, and Git credentials stay on this device.
           </p>
         </section>
 
@@ -274,7 +274,7 @@ export function SettingsPage({
             <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2/20 border border-border/15 hover:bg-surface-2/30 transition-colors">
               <div className="min-w-0 pr-4">
                 <p className="text-xs font-bold text-text-primary">Auto-refresh project status</p>
-                <p className="text-[11px] text-text-muted mt-0.5">Keep repo states fresh while working</p>
+                <p className="text-[11px] text-text-muted mt-0.5">Refresh local Git status without changing repos</p>
               </div>
               <Switch
                 checked={settings.autoRefreshReposEnabled}
@@ -286,7 +286,7 @@ export function SettingsPage({
             <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2/20 border border-border/15 hover:bg-surface-2/30 transition-colors">
               <div className="min-w-0 pr-4">
                 <p className="text-xs font-bold text-text-primary">Auto-sync changes</p>
-                <p className="text-[11px] text-text-muted mt-0.5">Share work status with the team automatically</p>
+                <p className="text-[11px] text-text-muted mt-0.5">Share work claims and handoff notes automatically</p>
               </div>
               <Switch
                 checked={settings.autoSyncEnabled}

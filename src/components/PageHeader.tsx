@@ -9,22 +9,22 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, eyebrow }: PageHeaderProps) {
   return (
-    <header className="px-8 py-10 border-b border-border/30 bg-surface-0">
-      <div className="max-w-7xl mx-auto flex items-end justify-between gap-6">
+    <header className="border-b border-border/30 bg-surface-0 px-4 py-7 sm:px-6 md:py-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           {eyebrow && (
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted opacity-80">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted opacity-80">
               {eyebrow}
             </p>
           )}
-          <h2 className="text-3xl font-bold text-text-primary">
+          <h2 className="text-2xl font-bold text-text-primary md:text-3xl">
             {title}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm font-medium text-text-muted leading-relaxed">
+          <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-text-muted">
             {description}
           </p>
         </div>
-        {actions && <div className="shrink-0 mb-1">{actions}</div>}
+        {actions && <div className="shrink-0 sm:mb-1">{actions}</div>}
       </div>
     </header>
   );

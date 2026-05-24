@@ -3,6 +3,7 @@ import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { emitTo } from "@tauri-apps/api/event";
+import { isTauri } from "@tauri-apps/api/core";
 import { resolveResource } from "@tauri-apps/api/path";
 import { Image } from "@tauri-apps/api/image";
 import type { TrayNotification, TrayWidgetState } from "../types";
@@ -16,6 +17,9 @@ let trayInstance: TrayIcon | null = null;
 let widgetWindow: WebviewWindow | null = null;
 
 export async function createWidgetWindow(): Promise<WebviewWindow> {
+  if (!isTauri()) {
+    throw new Error("Tauri runtime is unavailable.");
+  }
   const existing = await WebviewWindow.getByLabel("tray-widget");
   if (existing) {
     widgetWindow = existing;
@@ -74,6 +78,9 @@ export async function createWidgetWindow(): Promise<WebviewWindow> {
 }
 
 export async function initTray(callbacks: TrayCallbacks): Promise<TrayIcon> {
+  if (!isTauri()) {
+    throw new Error("Tauri runtime is unavailable.");
+  }
   if (trayInstance) return trayInstance;
 
   const toggleWidget = async () => {
@@ -154,24 +161,28 @@ export async function initTray(callbacks: TrayCallbacks): Promise<TrayIcon> {
 }
 
 export async function broadcastWidgetState(state: TrayWidgetState) {
+  if (!isTauri()) return;
   try {
     await emitTo("tray-widget", "widget:state-update", state);
   } catch { /* widget window may not exist yet */ }
 }
 
 export async function broadcastNotification(notification: TrayNotification) {
+  if (!isTauri()) return;
   try {
     await emitTo("tray-widget", "widget:notification", notification);
   } catch { /* widget window may not exist yet */ }
 }
 
 export async function updateTrayTooltip(text: string) {
+  if (!isTauri()) return;
   if (trayInstance) {
     await trayInstance.setTooltip(text);
   }
 }
 
 export async function openMainWindow() {
+  if (!isTauri()) return;
   const win = getCurrentWindow();
   await win.show();
   await win.unminimize();
@@ -179,6 +190,7 @@ export async function openMainWindow() {
 }
 
 export async function destroyTray() {
+  if (!isTauri()) return;
   if (trayInstance) {
     await TrayIcon.removeById("axiom-tray");
     trayInstance = null;
@@ -186,6 +198,7 @@ export async function destroyTray() {
 }
 
 export async function destroyWidgetWindow() {
+  if (!isTauri()) return;
   if (widgetWindow) {
     try { await widgetWindow.destroy(); } catch { /* already gone */ }
     widgetWindow = null;

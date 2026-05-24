@@ -3,13 +3,11 @@ import {
   AlertTriangle,
   Check,
   Clock,
-  Code2,
-  FolderOpen,
   GitBranch,
+  ListChecks,
   Loader2,
-  Play,
   RefreshCw,
-  Square,
+  ShieldCheck,
   Terminal,
 } from "lucide-react";
 import type {
@@ -189,6 +187,14 @@ export function TodayPage({
 
   const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
   const suggestedItem = launcherItems.find((item) => !item.cloneRequired && !item.session) ?? launcherItems[0];
+  const reviewCount = launcherItems.filter((item) => item.needsReview && !item.session).length;
+  const cloneCount = launcherItems.filter((item) => item.cloneRequired).length;
+  const clearCount = launcherItems.filter((item) => !item.needsReview && !item.cloneRequired && !item.session).length;
+  const privateReadiness = syncInfo.mode === "cloud"
+    ? "Cloud sync active"
+    : syncInfo.mode === "github"
+      ? "GitHub sync active"
+      : "Local private mode";
 
   function startItem(item: LauncherItem, force = false) {
     if (!item.repo) return;
@@ -228,6 +234,10 @@ export function TodayPage({
           <div className="min-w-0">
             <h1 className="text-sm font-bold text-text-primary">Axiom Workspace</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+              <span className="inline-flex items-center gap-1 rounded-md border border-border/35 bg-surface-1 px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] text-text-secondary">
+                <ShieldCheck size={10} />
+                Private
+              </span>
               <span className={`h-1.5 w-1.5 rounded-full ${syncInfo.dotClass}`} />
               <span>{syncInfo.label}</span>
               <span className="text-text-muted/50">/</span>
@@ -251,7 +261,12 @@ export function TodayPage({
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-2xl border border-border/30 bg-surface-1/70 p-5 shadow-2xl shadow-black/20">
-            <p className="text-[11px] font-bold text-text-muted">Now</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-bold text-text-muted">Now</p>
+              <span className="rounded-md border border-border/30 bg-surface-2/35 px-2 py-1 text-[10px] font-bold text-text-secondary">
+                {privateReadiness}
+              </span>
+            </div>
             {myActiveSession ? (
               <div className="mt-3 space-y-4">
                 <div className="min-w-0">
@@ -289,9 +304,9 @@ export function TodayPage({
             ) : (
               <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-text-primary">You are not working</h2>
+                  <h2 className="text-xl font-bold text-text-primary">No active work claimed</h2>
                   <p className="mt-1.5 text-xs text-text-secondary">
-                    {suggestedItem ? `Start from ${suggestedItem.name}, or pick any project below.` : "Add your first Axiom project to begin."}
+                    {suggestedItem ? `Start ${suggestedItem.name}, or choose another project below.` : "Add a project to make this workspace operational."}
                   </p>
                 </div>
                 {suggestedItem && !suggestedItem.cloneRequired && (
@@ -305,7 +320,7 @@ export function TodayPage({
 
           <div className="rounded-2xl border border-border/25 bg-surface-1/45 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-bold text-text-muted">Next</p>
+              <p className="text-[11px] font-bold text-text-muted">Priorities</p>
               {attentionItems.length > 0 && <button className="text-[11px] font-bold text-accent" onClick={() => onNavigate("projects")}>Review all</button>}
             </div>
             {attentionItems.length > 0 ? (
@@ -315,10 +330,37 @@ export function TodayPage({
                 <Check size={15} className="text-status-clean" />
                 <div>
                   <p className="text-xs font-bold text-text-primary">Workspace clear</p>
-                  <p className="mt-0.5 text-[11px] text-text-muted">No action needed before starting.</p>
+                  <p className="mt-0.5 text-[11px] text-text-muted">No blockers before starting work.</p>
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/20 bg-surface-1/35 p-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-text-muted">
+              <ListChecks size={13} />
+              Ready
+            </div>
+            <p className="mt-2 text-2xl font-bold text-status-clean">{clearCount}</p>
+            <p className="mt-1 text-[11px] text-text-muted">Projects safe to start.</p>
+          </div>
+          <div className="rounded-xl border border-border/20 bg-surface-1/35 p-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-text-muted">
+              <AlertTriangle size={13} />
+              Review
+            </div>
+            <p className="mt-2 text-2xl font-bold text-status-dirty">{reviewCount}</p>
+            <p className="mt-1 text-[11px] text-text-muted">Projects needing a quick check.</p>
+          </div>
+          <div className="rounded-xl border border-border/20 bg-surface-1/35 p-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-text-muted">
+              <ShieldCheck size={13} />
+              Private scope
+            </div>
+            <p className="mt-2 text-sm font-bold text-text-primary">Coordination only</p>
+            <p className="mt-1 text-[11px] text-text-muted">{cloneCount} missing install{cloneCount === 1 ? "" : "s"} tracked.</p>
           </div>
         </section>
 
@@ -326,7 +368,7 @@ export function TodayPage({
           <div className="flex items-center justify-between border-b border-border/20 px-4 py-3">
             <div>
               <h2 className="text-sm font-bold text-text-primary">Project Launcher</h2>
-              <p className="mt-0.5 text-[11px] text-text-muted">Open, start, finish, review, or clone without leaving Home.</p>
+              <p className="mt-0.5 text-[11px] text-text-muted">Open tools, claim work, review risk, or clone missing installs.</p>
             </div>
             {loading && <Loader2 size={14} className="animate-spin text-text-muted" />}
           </div>
@@ -343,7 +385,7 @@ export function TodayPage({
                 </button>
               </div>
             ) : launcherItems.map((item) => (
-              <div key={item.id} className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition hover:bg-surface-2/25">
+              <div key={item.id} className="grid grid-cols-1 gap-3 px-4 py-3 transition hover:bg-surface-2/25 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-text-primary">{item.name}</p>
                   <p className="mt-1 truncate text-[11px] text-text-muted">{item.status} · {item.detail}</p>
@@ -353,7 +395,7 @@ export function TodayPage({
                   <span className="truncate">{item.branch}</span>
                   {item.teammateSession && <span className="truncate text-status-dirty">{normalizeDisplayName(item.teammateSession.userName)}</span>}
                 </div>
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
                   <button
                     className={`h-8 rounded-lg px-3 text-[11px] font-bold transition-colors ${
                       item.session ? "bg-accent text-white hover:bg-accent-hover" :

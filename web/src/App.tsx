@@ -9,12 +9,11 @@ import {
   LockKeyhole,
   MonitorDown,
   ShieldCheck,
-  Sparkles,
   Users,
 } from "lucide-react";
 
-const latestVersion = "0.9.0";
-const targetVersion = "1.0.0";
+const latestVersion = "1.5.2";
+const targetVersion = "1.5.2";
 const releasesUrl = "https://github.com/Mageester/axiom-workspace/releases";
 
 const workflow = [
@@ -29,7 +28,7 @@ const workflow = [
 const troubleshooting = [
   ["I cannot sync", "Open Settings in the desktop app, verify GitHub access, then run Sync Now."],
   ["Repo shows attention needed", "Read the repo card. Axiom distinguishes local changes, remote updates, no upstream, and real errors."],
-  ["Installer is missing", "Use the GitHub Releases link until the v1.0.0 installer asset is published."],
+  ["Installer is missing", "Use the GitHub Releases link until the current internal installer asset is published."],
 ];
 
 function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "safe" | "warn" }) {
@@ -49,9 +48,6 @@ function Section({ eyebrow, title, children }: { eyebrow: string; title: string;
 export default function App() {
   return (
     <main>
-      <div className="orb orb-a" />
-      <div className="orb orb-b" />
-
       <header className="topbar">
         <div className="brand">
           <div className="mark">AX</div>
@@ -95,15 +91,15 @@ export default function App() {
           </div>
           <h2>Latest internal build</h2>
           <div className="version-row">
-            <span>Current beta</span>
+            <span>Current release</span>
             <strong>v{latestVersion}</strong>
           </div>
           <div className="version-row muted">
-            <span>1.0 target</span>
+            <span>Polish release</span>
             <strong>v{targetVersion}</strong>
           </div>
           <p>
-            Installer asset links will be added after the signed v1.0.0 release is built and published. Until then, use the GitHub Releases page.
+            Installer asset links are published from GitHub Releases when an internal build is ready.
           </p>
           <a href={releasesUrl} target="_blank" rel="noreferrer" className="text-link">
             Open release downloads <ArrowRight size={15} />
@@ -142,7 +138,7 @@ export default function App() {
         <div className="grid three">
           <article className="card small"><GitBranch size={18} /><h3>Git-based sync repo</h3><p>The desktop app uses a validated team sync repo for work sessions, claimed areas, and handoff notes.</p></article>
           <article className="card small"><ShieldCheck size={18} /><h3>Project repos stay read-only</h3><p>Axiom reads local status diagnostics. It does not write, reset, clean, merge, or sync source code from project repos.</p></article>
-          <article className="card small"><Sparkles size={18} /><h3>Safe to start</h3><p>The product question stays simple: who is working on what, and is it safe for me to start?</p></article>
+          <article className="card small"><CheckCircle2 size={18} /><h3>Safe to start</h3><p>The product question stays simple: who is working on what, and is it safe for me to start?</p></article>
         </div>
       </Section>
 

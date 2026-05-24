@@ -50,8 +50,11 @@ export function Sidebar({
           <img src={axiomMark} alt="" className="h-6.5 w-6.5 object-contain" aria-hidden="true" />
           <div className="hidden min-w-0 sm:block">
             <h1 className="truncate text-[11px] font-bold text-text-primary">
-              Axiom
+              Axiom Workspace
             </h1>
+            <p className="truncate text-[8px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+              Private
+            </p>
           </div>
         </div>
       </div>

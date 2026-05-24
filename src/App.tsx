@@ -76,8 +76,9 @@ import { openProjectFolder, openProjectInCode, openProjectTerminal } from "./lib
 import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMainWindow, createWidgetWindow, broadcastWidgetState, broadcastNotification } from "./lib/tray";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { isTauri } from "@tauri-apps/api/core";
 
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.2";
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
 
@@ -125,6 +126,10 @@ function createChecklist(state: SetupState): SetupChecklistItem[] {
 }
 
 function formatError(error: unknown, fallback: string): string {
+  const nativeShellMessage =
+    "Native desktop services are unavailable in browser preview. Use the Tauri desktop app for setup, Git checks, and project actions.";
+  if (error instanceof Error && error.message?.includes("invoke")) return nativeShellMessage;
+  if (typeof error === "string" && error.includes("invoke")) return nativeShellMessage;
   if (error instanceof Error && error.message) return error.message;
   return typeof error === "string" && error ? error : fallback;
 }
@@ -316,6 +321,7 @@ function App() {
 
   // Initialize tray
   useEffect(() => {
+    if (!isTauri()) return;
     if (!setupState.setupComplete || trayInitializedRef.current) return;
     trayInitializedRef.current = true;
     const trayPromise = initTray({

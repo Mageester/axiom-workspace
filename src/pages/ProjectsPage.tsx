@@ -160,6 +160,10 @@ export function ProjectsPage({
     () => buildRows(repos, registeredProjects, repoNicknames, activeSessions, defaultUserName),
     [repos, registeredProjects, repoNicknames, activeSessions, defaultUserName],
   );
+  const safeRows = rows.filter((row) => row.health === "Safe to start").length;
+  const reviewRows = rows.filter((row) => row.health === "Review first" || row.health === "Needs attention").length;
+  const activeRows = rows.filter((row) => row.health === "Working here").length;
+  const missingRows = rows.filter((row) => row.primary === "Clone Latest").length;
 
   function startRepo(repo: LiveRepo) {
     onStartSession({
@@ -186,8 +190,8 @@ export function ProjectsPage({
       <div className="border-b border-border/25 bg-surface-0/90 px-6 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">Project Launcher</h1>
-            <p className="mt-1 text-xs text-text-muted">Launch projects, start work, review risk, and clone missing installs.</p>
+            <h1 className="text-lg font-semibold text-text-primary">Projects</h1>
+            <p className="mt-1 text-xs text-text-muted">Operational list for local installs, branches, risk, and work claims.</p>
           </div>
           <div className="flex items-center gap-2">
             <button className="flex h-8 items-center gap-1.5 rounded-lg border border-border/40 bg-surface-1 px-3 text-[11px] font-bold text-text-primary hover:bg-surface-2" onClick={onRefreshAll} disabled={loading || repos.length === 0}>
@@ -204,16 +208,32 @@ export function ProjectsPage({
 
       <main className="mx-auto max-w-7xl px-6 py-6">
         {rows.length === 0 ? (
-          <div className="flex h-96 flex-col items-center justify-center rounded-2xl border border-dashed border-border/45 bg-surface-1/35">
+          <div className="flex h-96 flex-col items-center justify-center rounded-2xl border border-dashed border-border/45 bg-surface-1/35 px-6">
             <p className="text-base font-semibold text-text-primary">Add your first Axiom project</p>
-            <p className="mt-2 max-w-sm text-center text-xs text-text-muted">Register or discover a repository to turn Workspace into a project launcher.</p>
+            <p className="mt-2 max-w-sm text-center text-xs text-text-muted">Register or discover a repository. Workspace tracks coordination state, not source code.</p>
             <button className="mt-6 flex h-9 items-center gap-1.5 rounded-xl bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => setShowDiscoveryModal(true)}>
               <Search size={13} />
               Find Repositories
             </button>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-border/25 bg-surface-1/45 shadow-sm">
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              {[
+                ["Safe", safeRows, "text-status-clean"],
+                ["Review", reviewRows, "text-status-dirty"],
+                ["Active", activeRows, "text-accent-hover"],
+                ["Missing", missingRows, "text-text-secondary"],
+              ].map(([label, value, className]) => (
+                <div key={label} className="rounded-xl border border-border/20 bg-surface-1/35 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-muted">{label}</p>
+                  <p className={`mt-1 text-xl font-bold ${className}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-border/25 bg-surface-1/45 shadow-sm">
+            <div className="min-w-[860px]">
             <div className="grid grid-cols-[minmax(190px,1.4fr)_0.8fr_0.9fr_0.75fr_0.65fr_160px] gap-3 border-b border-border/20 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-text-muted">
               <span>Project</span>
               <span>Branch</span>
@@ -274,6 +294,8 @@ export function ProjectsPage({
                 </div>
               ))}
             </div>
+          </div>
+          </div>
           </div>
         )}
 
