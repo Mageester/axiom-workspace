@@ -43,7 +43,16 @@ export function getRepoProfile(nameOrPath: string): RepoProfile | null {
 }
 
 export function getRepoDisplayName(repo: Pick<LiveRepo, "name" | "path">, nickname?: string): string {
-  return nickname?.trim() || getRepoProfile(repo.name)?.friendlyName || repo.name;
+  if (nickname?.trim()) return nickname.trim();
+  const profile = getRepoProfile(repo.name);
+  if (profile?.friendlyName) return profile.friendlyName;
+  // Fallback: Humanize the slug/raw repo name (e.g. Axiom-Pipeline-Engine -> Axiom Pipeline Engine)
+  return repo.name
+    .replace(/[-_]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 export function getRepoDescription(repo: Pick<LiveRepo, "name" | "path">): string | null {

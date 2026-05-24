@@ -56,7 +56,7 @@ describe("computeAttentionItems", () => {
     expect(items).toContainEqual(
       expect.objectContaining({
         id: "long-session-Riley-repo-1",
-        title: "Riley has long-running sessions",
+        title: "Riley has duplicate long-running sessions",
         description: "Axiom Site · 2 sessions · longest 74h",
         actionLabel: "Review",
       }),

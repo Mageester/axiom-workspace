@@ -253,39 +253,49 @@ export function TodayPage({
           <div className="rounded-2xl border border-border/30 bg-surface-1/70 p-5 shadow-2xl shadow-black/20">
             <p className="text-[11px] font-bold text-text-muted">Now</p>
             {myActiveSession ? (
-              <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="mt-3 space-y-4">
                 <div className="min-w-0">
-                  <h2 className="text-2xl font-semibold text-text-primary">You are working on {myActiveSession.repoName}</h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
-                    <span>{myActiveSession.branch || "main"}</span>
-                    <span>&middot;</span>
+                  <h2 className="text-xl font-bold text-text-primary">
+                    You are working on <span className="text-accent">{getRepoDisplayName(myRepo || { name: myActiveSession.repoName, path: "" })}</span>
+                  </h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+                    <span className="font-semibold text-text-primary">{myActiveSession.branch || "main"}</span>
+                    <span className="text-text-muted/40">&middot;</span>
                     <span>{durationLabel(myActiveSession.startedAt)}</span>
                     {myRepo && myRepo.changedFileCount > 0 && (
                       <>
-                        <span>&middot;</span>
-                        <span className="text-status-dirty">{formatChangedFiles(myRepo.changedFileCount)}</span>
+                        <span className="text-text-muted/40">&middot;</span>
+                        <span className="text-status-dirty font-semibold">{formatChangedFiles(myRepo.changedFileCount)}</span>
                       </>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button className="h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => setFinishModalOpen(true)}>
+                <div className="flex flex-wrap items-center gap-2 border-t border-border/10 pt-3">
+                  <button className="h-8 rounded-lg bg-accent px-3 text-[11px] font-bold text-white hover:bg-accent-hover transition-colors shadow-sm" onClick={() => setFinishModalOpen(true)}>
                     Finish Work
                   </button>
-                  {myRepo && <button className="h-9 rounded-lg border border-border/40 bg-surface-2 px-3 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenInCode(myRepo.path)}>Open in VS Code</button>}
-                  {myRepo && <button className="h-9 rounded-lg border border-border/40 bg-surface-2 px-3 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenTerminal(myRepo.path)}>Terminal</button>}
+                  {myRepo && (
+                    <>
+                      <button className="h-8 rounded-lg border border-border/40 bg-surface-2 px-3 text-[11px] font-bold text-text-primary hover:bg-surface-3 transition-colors" onClick={() => void onOpenInCode(myRepo.path)}>
+                        VS Code
+                      </button>
+                      <button className="h-8 rounded-lg border border-border/40 bg-surface-2 px-3 text-[11px] font-bold text-text-primary hover:bg-surface-3 transition-colors" onClick={() => void onOpenTerminal(myRepo.path)}>
+                        Terminal
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-2xl font-semibold text-text-primary">You are not working</h2>
-                  <p className="mt-1.5 text-sm text-text-secondary">
+                  <h2 className="text-xl font-bold text-text-primary">You are not working</h2>
+                  <p className="mt-1.5 text-xs text-text-secondary">
                     {suggestedItem ? `Start from ${suggestedItem.name}, or pick any project below.` : "Add your first Axiom project to begin."}
                   </p>
                 </div>
                 {suggestedItem && !suggestedItem.cloneRequired && (
-                  <button className="h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => startItem(suggestedItem)}>
+                  <button className="h-8 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover transition-colors" onClick={() => startItem(suggestedItem)}>
                     Start Work
                   </button>
                 )}
@@ -373,15 +383,15 @@ export function TodayPage({
 
         {recentImportant.length > 0 && (
           <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[11px] font-bold text-text-muted">Recent</h2>
-              <button className="text-[11px] font-bold text-accent" onClick={() => onNavigate("activity")}>Activity</button>
+            <div className="flex items-center justify-between border-b border-border/10 pb-1.5">
+              <h2 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recent Activity</h2>
+              <button className="text-[11px] font-bold text-accent hover:text-accent-hover" onClick={() => onNavigate("activity")}>Activity</button>
             </div>
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="divide-y divide-border/10">
               {recentImportant.map((event) => (
-                <div key={event.id} className="rounded-xl border border-border/15 bg-surface-1/35 px-3 py-2.5">
-                  <p className="truncate text-xs text-text-secondary">{humanizeActivityEvent(event)}</p>
-                  <p className="mt-1 text-[10px] text-text-muted">{timeAgo(event.createdAt)}</p>
+                <div key={event.id} className="flex items-center justify-between py-2 text-xs">
+                  <span className="truncate font-semibold text-text-secondary">{humanizeActivityEvent(event)}</span>
+                  <span className="ml-4 shrink-0 text-[10px] text-text-muted">{timeAgo(event.createdAt)}</span>
                 </div>
               ))}
             </div>

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  ShieldAlert,
 } from "lucide-react";
 import type {
   DeviceIdentity,
@@ -58,7 +59,6 @@ function formatDateTime(value?: string): string {
   }).format(new Date(value));
 }
 
-// Sleek CSS Interactive Toggle Switch Component
 interface SwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -87,7 +87,6 @@ function Switch({ checked, onChange }: SwitchProps) {
 
 export function SettingsPage({
   setupState,
-  checklist,
   settings,
   syncStatus,
   syncInfo,
@@ -97,10 +96,7 @@ export function SettingsPage({
   repoCount,
   registeredProjectCount,
   activeSessionCount,
-  repoDiagnostics,
-  cloudSyncUnavailable,
   onIdentityChange,
-  onSetupChange,
   onSettingsChange,
   onValidateSetup,
   onSyncNow,
@@ -108,7 +104,6 @@ export function SettingsPage({
   onResetSessionsAndLocks,
   onResetSyncState,
   onFullLocalReset,
-  onResetDismissedSuggestions,
 }: SettingsPageProps) {
   const [identityDraft, setIdentityDraft] = useState(setupState.identity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -121,7 +116,6 @@ export function SettingsPage({
     { label: "Active sync mode", value: syncInfo.label },
     { label: "Last sync source", value: syncInfo.lastSuccessfulSource },
     { label: "Cloudflare endpoint", value: syncInfo.cloudConfigured ? "Configured" : "Not configured" },
-    { label: "Device token", value: syncInfo.tokenConfigured ? "Configured" : "Not configured" },
     { label: "Backend health", value: syncInfo.backendHealth },
     { label: "Last sync result", value: settings.lastSyncError || settings.cloudSyncLastError || settings.lastSyncStatus || syncInfo.detail },
     { label: "Installed projects", value: String(repoCount) },
@@ -159,7 +153,7 @@ export function SettingsPage({
 
       <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-8">
         {/* 1. Identity Section */}
-        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+        <section className="space-y-4 p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               Identity Profile
@@ -179,7 +173,7 @@ export function SettingsPage({
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Display Name</label>
               <input
-                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all"
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all placeholder:text-text-muted/40"
                 value={identityDraft.userName}
                 onChange={(e) => setIdentityDraft({ ...identityDraft, userName: e.target.value })}
                 placeholder="Riley"
@@ -188,20 +182,20 @@ export function SettingsPage({
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Name</label>
               <input
-                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all"
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all placeholder:text-text-muted/40"
                 value={identityDraft.deviceName}
                 onChange={(e) => setIdentityDraft({ ...identityDraft, deviceName: e.target.value })}
-                placeholder="Riley's Laptop"
+                placeholder="Riley’s Laptop"
               />
             </div>
           </div>
         </section>
 
-        {/* 2. Sync Mode Section */}
-        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+        {/* 2. Cloud Synchronization Setup */}
+        <section className="space-y-4 p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              Sync Mode
+              Cloud Synchronization Setup
             </h3>
             <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
               syncInfo.mode === "cloud"
@@ -213,53 +207,64 @@ export function SettingsPage({
               {syncInfo.label}
             </span>
           </div>
-          <div className="rounded-xl border border-border/15 bg-surface-2/20 p-3">
-            <p className="text-sm font-bold text-text-primary">{syncInfo.label}</p>
-            <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-              {syncInfo.mode === "local"
-                ? "Workspace is saved on this device. Cloud sync is not configured."
-                : syncInfo.mode === "github"
-                  ? "Workspace state is syncing through the legacy GitHub layer."
-                  : syncInfo.mode === "cloud"
-                    ? "Connected to the workspace API."
-                    : `${syncInfo.detail}. Workspace remains usable in local-first mode.`}
-            </p>
+
+          {/* Sync Mode Status Control Card */}
+          <div className="rounded-xl border border-border/15 bg-surface-2/20 p-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-text-primary">Sync Mode</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                {syncInfo.mode === "local"
+                  ? "Workspace state is saved on this device. Cloud synchronization is not configured."
+                  : syncInfo.mode === "github"
+                    ? "Workspace state is syncing through the legacy GitHub layer."
+                    : syncInfo.mode === "cloud"
+                      ? "Connected to the secure Cloudflare workspace API."
+                      : `${syncInfo.detail}. Workspace remains usable in local-first mode.`}
+              </p>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-3">
+
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Worker Endpoint</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Cloudflare Worker Endpoint</label>
               <input
-                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-mono text-text-primary outline-none transition-all"
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-mono text-text-primary outline-none transition-all placeholder:text-text-muted/30"
                 value={settings.cloudSyncEndpoint || ""}
                 onChange={(e) => onSettingsChange({ ...settings, cloudSyncEndpoint: e.target.value.trim(), cloudSyncLastError: undefined })}
                 placeholder="https://axiom-workspace-api.example.workers.dev"
               />
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-border/15 bg-surface-2/20 p-3">
+
+            {/* Device Token Secure Card Status */}
+            <div className="flex items-center justify-between rounded-xl border border-border/15 bg-surface-2/20 px-3 py-2.5">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device token</p>
-                <p className="mt-0.5 text-xs font-semibold text-text-primary">
-                  {syncInfo.tokenConfigured ? "Stored locally on this device" : "Not configured"}
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Token</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${syncInfo.tokenConfigured ? "bg-status-clean" : "bg-text-muted"}`} />
+                  <p className="text-xs font-mono font-bold text-text-secondary leading-none">
+                    {syncInfo.tokenConfigured ? "••••••••••••••••" : "Not Configured"}
+                  </p>
+                </div>
               </div>
               <button
-                className="h-8 px-3 rounded-lg bg-surface-2 border border-border/40 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all"
+                className="h-7 px-3 rounded-lg bg-surface-2 border border-border/40 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all"
                 onClick={() => {
                   const token = window.prompt("Paste the device token for this desktop.");
                   if (token !== null) onSettingsChange({ ...settings, cloudSyncDeviceToken: token.trim(), cloudSyncLastError: undefined });
                 }}
               >
-                {syncInfo.tokenConfigured ? "Replace token" : "Register device"}
+                {syncInfo.tokenConfigured ? "Change Token" : "Set Token"}
               </button>
             </div>
           </div>
-          <p className="text-[11px] text-text-muted leading-relaxed">
+
+          <p className="text-[10px] text-text-muted leading-relaxed">
             Cloudflare stores workspace state only. Source code and Git credentials stay on this device.
           </p>
         </section>
 
-        {/* 2. Automation Section */}
-        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+        {/* 3. Automation Section */}
+        <section className="space-y-4 p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Workspace Automation
           </h3>
@@ -291,8 +296,8 @@ export function SettingsPage({
           </div>
         </section>
 
-        {/* 3. Health & Diagnostics Summary */}
-        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+        {/* 4. Secondary Diagnostics Summary */}
+        <section className="space-y-4 p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Workspace Diagnostics
           </h3>
@@ -308,7 +313,7 @@ export function SettingsPage({
 
           <div className="flex items-center gap-2 pt-2">
             <button
-              className="h-8.5 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
+              className="h-8 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
               onClick={() => void onSyncNow()}
               disabled={syncing}
             >
@@ -316,7 +321,7 @@ export function SettingsPage({
               Sync Now
             </button>
             <button
-              className="h-8.5 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
+              className="h-8 px-3.5 rounded-lg bg-surface-2 border border-border/50 text-[10px] font-bold text-text-primary hover:bg-surface-3 transition-all flex items-center gap-1.5 active:scale-[0.98]"
               onClick={() => void onValidateSetup()}
             >
               <CheckCircle2 size={12} />
@@ -325,7 +330,7 @@ export function SettingsPage({
           </div>
         </section>
 
-        {/* 4. Advanced (Secondary/System information) */}
+        {/* 5. Separated Advanced / Danger Zone */}
         <section className="pt-4 border-t border-border/20">
           <button
             className="flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors outline-none"
@@ -352,7 +357,10 @@ export function SettingsPage({
 
               {/* Danger Zone */}
               <div className="p-4 rounded-xl border border-status-locked/15 bg-status-locked/5 space-y-3">
-                <h4 className="text-[9px] font-bold uppercase tracking-wider text-status-locked">Danger Zone</h4>
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert size={14} className="text-status-locked animate-pulse" />
+                  <h4 className="text-[9px] font-bold uppercase tracking-wider text-status-locked">Danger Zone</h4>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   <button
                     className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
@@ -381,7 +389,7 @@ export function SettingsPage({
                 </div>
               </div>
 
-              {/* Logs */}
+              {/* System Logs */}
               <div className="p-3.5 rounded-xl border border-border/20 bg-surface-1/20 font-mono">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Last System Error</p>
                 <p className="text-[10px] text-status-locked break-all leading-relaxed">{lastError}</p>

@@ -214,7 +214,7 @@ export function ProjectsPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border/25 bg-surface-1/45 shadow-sm">
-            <div className="grid grid-cols-[minmax(190px,1.4fr)_0.8fr_0.9fr_0.75fr_0.65fr_160px] gap-3 border-b border-border/20 px-4 py-3 text-[10px] font-bold uppercase text-text-muted">
+            <div className="grid grid-cols-[minmax(190px,1.4fr)_0.8fr_0.9fr_0.75fr_0.65fr_160px] gap-3 border-b border-border/20 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-text-muted">
               <span>Project</span>
               <span>Branch</span>
               <span>Health</span>
@@ -224,12 +224,12 @@ export function ProjectsPage({
             </div>
             <div className="divide-y divide-border/15">
               {rows.map((row) => (
-                <div key={row.id} className="group grid grid-cols-[minmax(190px,1.4fr)_0.8fr_0.9fr_0.75fr_0.65fr_160px] items-center gap-3 px-4 py-3.5 text-xs transition-colors hover:bg-surface-2/40">
+                <div key={row.id} className="group grid grid-cols-[minmax(190px,1.4fr)_0.8fr_0.9fr_0.75fr_0.65fr_160px] items-center gap-3 px-4 py-3.5 text-xs transition-colors hover:bg-surface-2/30">
                   <div className="min-w-0">
                     <p className="truncate font-bold text-text-primary">{row.name}</p>
                     <p className="mt-1 truncate text-[11px] text-text-muted">{row.installState}</p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-1.5 text-text-secondary">
+                  <div className="flex min-w-0 items-center gap-1.5 text-text-secondary" title={row.branch}>
                     <GitBranch size={12} />
                     <span className="truncate">{row.branch}</span>
                   </div>
@@ -261,7 +261,7 @@ export function ProjectsPage({
                       <MoreHorizontal size={15} />
                     </button>
                     {menuRow === row.id && (
-                      <div className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl border border-border/35 bg-surface-1 shadow-2xl">
+                      <div className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl border border-border/35 bg-surface-1 shadow-2xl animate-slide-in">
                         {row.repo && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-text-secondary hover:bg-surface-2" onClick={() => void onOpenFolder(row.repo!.path)}><FolderOpen size={12} />Open folder</button>}
                         {row.repo && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-text-secondary hover:bg-surface-2" onClick={() => void onRefreshRepo(row.repo!.path)}><RefreshCw size={12} />Refresh</button>}
                         {row.repo && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-text-secondary hover:bg-surface-2" onClick={() => void onPullRepo(row.repo!.path)} disabled={pullingPaths.has(row.repo.path)}>Pull latest</button>}
@@ -278,16 +278,16 @@ export function ProjectsPage({
         )}
 
         {rows.length > 0 && (
-          <div className="flex flex-wrap items-center justify-center gap-4 py-4">
-            <button className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted hover:text-text-primary transition-colors" onClick={onRefreshAll}>
+          <div className="flex flex-wrap items-center justify-center gap-4 py-4 mt-2">
+            <button className="flex items-center gap-1.5 text-[11px] font-semibold text-text-muted hover:text-text-primary transition-colors" onClick={onRefreshAll}>
               <RefreshCw size={12} /> Refresh all projects
             </button>
             <span className="text-border/40">•</span>
-            <button className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted hover:text-text-primary transition-colors" onClick={() => setShowAddModal(true)}>
+            <button className="flex items-center gap-1.5 text-[11px] font-semibold text-text-muted hover:text-text-primary transition-colors" onClick={() => setShowAddModal(true)}>
               <Plus size={12} /> Add project
             </button>
             <span className="text-border/40">•</span>
-            <button className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted hover:text-text-primary transition-colors" onClick={() => setShowDiscoveryModal(true)}>
+            <button className="flex items-center gap-1.5 text-[11px] font-semibold text-text-muted hover:text-text-primary transition-colors" onClick={() => setShowDiscoveryModal(true)}>
               <Search size={12} /> Find repositories
             </button>
           </div>

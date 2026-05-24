@@ -31,7 +31,6 @@ export function Sidebar({
   activeItem,
   onNavigate,
   setupComplete,
-  activeSessionCount = 0,
   syncStatus,
   syncSettings,
   syncInfo,
@@ -44,7 +43,7 @@ export function Sidebar({
     isSyncing: Boolean(syncStatus && syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error"),
   };
   return (
-    <aside className="flex h-full w-14 shrink-0 flex-col border-r border-border/20 bg-surface-1/80 select-none sm:w-44">
+    <aside className="flex h-full w-14 shrink-0 flex-col border-r border-border/20 bg-surface-1/40 backdrop-blur-md select-none sm:w-44">
       {/* Brand Header */}
       <div className="px-3 py-4">
         <div className="flex items-center gap-2.5">
@@ -57,7 +56,7 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Navigation Spacing Tightened */}
+      {/* Navigation */}
       <nav className="flex-1 px-2 py-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const isActive = activeItem === item.id;
@@ -67,7 +66,7 @@ export function Sidebar({
               onClick={() => onNavigate(item.id)}
               className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-all ${
                 isActive
-                  ? "bg-surface-2/55 text-text-primary"
+                  ? "bg-surface-2/55 text-text-primary animate-slide-in"
                   : "text-text-muted hover:text-text-secondary hover:bg-surface-2/25"
               }`}
             >
@@ -80,22 +79,20 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Compact Connection Card */}
+      {/* Compact Connection Status */}
       {activeItem !== "today" && (
-        <div className="p-2">
-          <div className="rounded-lg border border-border/15 bg-surface-2/10 p-2.5 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${sync.dotClass}`} />
-            <span className={`text-[9px] font-bold ${sync.textClass}`}>
-              {sync.label}
-            </span>
+        <div className="p-2 border-t border-border/10">
+          <div className="flex items-center gap-1.5 px-1 py-1">
+            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${sync.dotClass} ${sync.isSyncing ? "animate-pulse" : ""}`} />
+            <div className="hidden min-w-0 sm:block">
+              <p className="text-[9px] font-bold text-text-secondary truncate">{sync.label}</p>
+              <p className="text-[8px] text-text-muted truncate mt-0.5">
+                {sync.isSyncing && <Loader2 size={8} className="inline animate-spin mr-1" />}
+                {sync.detail}
+              </p>
+            </div>
           </div>
-          <p className="hidden text-[10px] text-text-muted font-medium truncate sm:block">
-            {sync.isSyncing ? <Loader2 size={10} className="inline animate-spin" /> : null}
-            {sync.detail}
-          </p>
         </div>
-      </div>
       )}
     </aside>
   );

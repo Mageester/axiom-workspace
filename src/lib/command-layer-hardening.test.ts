@@ -76,7 +76,7 @@ describe("command layer hardening", () => {
 
     const longSessionItems = items.filter((item) => item.id.startsWith("long-session-Riley"));
     expect(longSessionItems).toHaveLength(1);
-    expect(longSessionItems[0].title).toBe("Riley has long-running sessions");
+    expect(longSessionItems[0].title).toBe("Riley has duplicate long-running sessions");
     expect(longSessionItems[0].description).toContain("2 sessions");
   });
 });

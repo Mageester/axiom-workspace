@@ -37,7 +37,7 @@ import {
   loadCards,
   saveCards,
 } from "./lib/board";
-import { loadRepoNicknames, setRepoNickname } from "./lib/repos";
+import { getRepoDisplayName, loadRepoNicknames, setRepoNickname } from "./lib/repos";
 import {
   applyWorkspaceEvents,
   buildSnapshotFromSessions,
@@ -795,142 +795,182 @@ function App() {
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const mySession = activeSessions.find((session) => samePerson(session.userName, setupState.identity.userName));
-    const missingProject = registeredProjects.find((project) => project.installStatus === "not_installed");
-    const firstRepo = repos[0];
-    const projectCommands = repos.flatMap((repo): CommandItem[] => {
-      const displayName = repoNicknames[repo.path] || repo.name;
-      return [
-        {
-          id: `open-code-${repo.id}`,
-          label: `Open ${displayName}`,
-          description: "Open in VS Code",
-          category: "project",
-          action: () => void runProjectOpenAction("code", repo.path),
-          keywords: ["code", "vscode", repo.name],
+
+    // Helper to get human display name
+    const getHumanDisplayName = (repoName: string, path: string): string => {
+      const nickname = repoNicknames[path];
+      const matched = registeredProjects.find(
+        (p) => p.name.toLowerCase() === repoName.toLowerCase() || (p.slug && p.slug.toLowerCase() === repoName.toLowerCase())
+      );
+      if (matched) return matched.name;
+      return getRepoDisplayName({ name: repoName, path }, nickname);
+    };
+
+    const items: CommandItem[] = [];
+
+    // 1. Active work command first
+    if (mySession) {
+      const activeProjName = getHumanDisplayName(mySession.repoName, mySession.repoPath);
+      const elapsedMs = Date.now() - new Date(mySession.startedAt).getTime();
+      const elapsedHours = Math.floor(elapsedMs / 36e5);
+      const elapsedMinutes = Math.floor((elapsedMs % 36e5) / 60000);
+      const durationLabel = elapsedHours > 0 ? `${elapsedHours}h ${elapsedMinutes}m` : `${elapsedMinutes}m`;
+      items.push({
+        id: "finish-current-work",
+        label: `Finish work on ${activeProjName}`,
+        description: `Active for ${durationLabel} on ${mySession.branch || "main"}`,
+        category: "work",
+        action: () => {
+          finishSession(mySession.id);
         },
-        {
-          id: `start-${repo.id}`,
-          label: `Start work on ${displayName}`,
-          description: repo.currentBranch || "main",
-          category: "work",
-          action: () => startSession({
-            repoId: repo.id,
-            repoName: displayName,
-            repoPath: repo.path,
-            userName: setupState.identity.userName,
-            title: `Work on ${displayName}`,
-            notes: "",
-            branch: repo.currentBranch,
-            targets: [{ id: `${repo.id}-general`, type: "area", value: "general work" }],
-          }),
-          keywords: ["start", "session", repo.name],
-        },
-      ];
+        keywords: ["finish", "stop", "done", "handoff", activeProjName, mySession.repoName],
+      });
+    }
+
+    // 2. Generate commands for each tracked repo
+    repos.forEach((repo) => {
+      const displayName = getHumanDisplayName(repo.name, repo.path);
+      const isWorkingHere = mySession && repo.id === mySession.repoId;
+      const teammateSession = activeSessions.find((session) => session.repoId === repo.id && !samePerson(session.userName, setupState.identity.userName));
+      const needsReview = repo.status === "error" || repo.ahead > 0 || repo.behind > 0 || repo.changedFileCount > 0 || Boolean(teammateSession);
+
+      // Always show Open in VS Code
+      items.push({
+        id: `open-code-${repo.id}`,
+        label: `Open ${displayName}`,
+        description: "Open in VS Code",
+        category: "project",
+        action: () => void runProjectOpenAction("code", repo.path),
+        keywords: ["open", "code", "vscode", displayName, repo.name],
+      });
+
+      // Always show Open terminal
+      items.push({
+        id: `open-terminal-${repo.id}`,
+        label: `Open Terminal for ${displayName}`,
+        description: "Open terminal window",
+        category: "project",
+        action: () => void runProjectOpenAction("terminal", repo.path),
+        keywords: ["open", "terminal", "command", displayName, repo.name],
+      });
+
+      // Show start or review options ONLY if the user is not already working here
+      if (!isWorkingHere) {
+        if (needsReview) {
+          items.push({
+            id: `review-${repo.id}`,
+            label: `Review ${displayName}`,
+            description: `Review risk: ${repo.ahead > 0 ? `${repo.ahead} ahead` : repo.behind > 0 ? `${repo.behind} behind` : teammateSession ? `${normalizeDisplayName(teammateSession.userName)} active` : "changes present"}`,
+            category: "work",
+            action: () => {
+              // Trigger startSession (it will run through start checks or modals)
+              startSession({
+                repoId: repo.id,
+                repoName: displayName,
+                repoPath: repo.path,
+                userName: setupState.identity.userName,
+                title: `Work on ${displayName}`,
+                notes: "",
+                branch: repo.currentBranch,
+                targets: [{ id: `${repo.id}-general`, type: "area", value: "general work" }],
+              });
+            },
+            keywords: ["review", "start", "attention", displayName, repo.name],
+          });
+        } else {
+          items.push({
+            id: `start-${repo.id}`,
+            label: `Start work on ${displayName}`,
+            description: repo.currentBranch || "main",
+            category: "work",
+            action: () => startSession({
+              repoId: repo.id,
+              repoName: displayName,
+              repoPath: repo.path,
+              userName: setupState.identity.userName,
+              title: `Work on ${displayName}`,
+              notes: "",
+              branch: repo.currentBranch,
+              targets: [{ id: `${repo.id}-general`, type: "area", value: "general work" }],
+            }),
+            keywords: ["start", "session", "begin", displayName, repo.name],
+          });
+        }
+      }
     });
-    const cloneCommands = registeredProjects
-      .filter((project) => project.installStatus === "not_installed")
-      .map((project): CommandItem => ({
-        id: `clone-${project.id}`,
-        label: `Clone ${project.name}`,
-        description: "Clone missing project",
-        category: "project",
-        action: () => void cloneRegisteredProject(project),
-        keywords: ["clone", "latest", project.name],
-      }));
-    return [
-      ...projectCommands,
-      ...cloneCommands,
-      {
-        id: "start-work",
-        label: "Start work",
-        description: "Pick a project",
-        category: "work",
-        action: () => setActiveNav("today"),
-        keywords: ["session", "begin", "today"],
-      },
-      {
-        id: "finish-work",
-        label: "Finish work",
-        description: mySession?.repoName ?? "No active work",
-        category: "work",
-        action: () => {
-          if (mySession) finishSession(mySession.id);
-        },
-        keywords: ["handoff", "done", "stop"],
-      },
-      {
-        id: "open-projects",
-        label: "Open project",
-        description: firstRepo?.name ?? "Projects",
-        category: "project",
-        action: () => setActiveNav("projects"),
-        keywords: ["repo", "folder"],
-      },
-      {
-        id: "clone-missing-project",
-        label: "Clone missing project",
-        description: missingProject?.name ?? "No missing projects",
-        category: "project",
-        action: () => {
-          if (missingProject) void cloneRegisteredProject(missingProject);
-          else setActiveNav("projects");
-        },
-        keywords: ["latest", "install", "repo"],
-      },
-      {
-        id: "view-needs-attention",
-        label: "View Needs Attention",
-        description: "Action inbox",
-        category: "navigation",
-        action: () => setActiveNav("today"),
-        keywords: ["review", "attention", "warnings"],
-      },
-      {
-        id: "configure-cloud-sync",
-        label: "Configure Cloud Sync",
-        description: syncInfo.label,
-        category: "system",
-        action: () => setActiveNav("settings"),
-        keywords: ["cloudflare", "sync", "settings"],
-      },
-      {
-        id: "sync-now",
-        label: "Sync now",
-        description: syncInfo.label,
-        category: "system",
-        action: () => void handleSyncNow(false),
-        keywords: ["cloud", "refresh"],
-      },
-      {
-        id: "refresh-projects",
-        label: "Refresh projects",
-        description: `${repos.length} tracked`,
-        category: "project",
-        action: () => void refreshAll(),
-        keywords: ["status", "git"],
-      },
-      {
-        id: "add-project",
-        label: "Add project",
-        description: "Register a repo",
-        category: "project",
-        action: () => setActiveNav("projects"),
-        keywords: ["register", "new"],
-      },
-      {
-        id: "view-activity",
-        label: "View activity",
-        category: "navigation",
-        action: () => setActiveNav("activity"),
-      },
-      {
-        id: "open-settings",
-        label: "Open settings",
-        category: "navigation",
-        action: () => setActiveNav("settings"),
-      },
-    ];
-  }, [activeSessions, syncInfo.label, registeredProjects, repos, repoNicknames, setupState.identity.userName, refreshAll]);
+
+    // 3. Uninstalled/missing projects show "Clone Latest" instead of "Start work"
+    registeredProjects.forEach((project) => {
+      const isInstalled = repos.some((r) => r.path.toLowerCase() === project.localPath?.toLowerCase());
+      if (!isInstalled || project.installStatus === "not_installed") {
+        items.push({
+          id: `clone-${project.id}`,
+          label: `Clone ${project.name}`,
+          description: "Missing locally - download from GitHub",
+          category: "project",
+          action: () => void cloneRegisteredProject(project),
+          keywords: ["clone", "install", "download", project.name],
+        });
+      }
+    });
+
+    // 4. Navigation & System Commands
+    items.push({
+      id: "nav-home",
+      label: "Go to Home",
+      description: "Launch work and view inbox",
+      category: "navigation",
+      action: () => setActiveNav("today"),
+      keywords: ["home", "today", "dashboard"],
+    });
+
+    items.push({
+      id: "nav-projects",
+      label: "Go to Projects",
+      description: "Manage local repositories",
+      category: "navigation",
+      action: () => setActiveNav("projects"),
+      keywords: ["projects", "repos", "list"],
+    });
+
+    items.push({
+      id: "nav-activity",
+      label: "Go to Activity",
+      description: "View workspace timeline",
+      category: "navigation",
+      action: () => setActiveNav("activity"),
+      keywords: ["activity", "history", "log", "timeline"],
+    });
+
+    items.push({
+      id: "nav-settings",
+      label: "Go to Settings",
+      description: "Configure identity and sync settings",
+      category: "navigation",
+      action: () => setActiveNav("settings"),
+      keywords: ["settings", "preferences", "config", "token"],
+    });
+
+    items.push({
+      id: "sync-now",
+      label: "Sync Workspace Now",
+      description: `Run full sync (${syncInfo.label})`,
+      category: "system",
+      action: () => void handleSyncNow(false),
+      keywords: ["sync", "cloud", "github", "cloudflare", "refresh"],
+    });
+
+    items.push({
+      id: "refresh-projects",
+      label: "Refresh Local Repositories",
+      description: `${repos.length} repos tracked`,
+      category: "system",
+      action: () => void refreshAll(),
+      keywords: ["refresh", "scan", "git", "status"],
+    });
+
+    return items;
+  }, [activeSessions, syncInfo, registeredProjects, repos, repoNicknames, setupState.identity.userName, refreshAll, handleSyncNow]);
 
   function renderPage() {
     switch (activeNav) {

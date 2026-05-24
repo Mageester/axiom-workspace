@@ -42,12 +42,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  letter-spacing: 0;
+  letter-spacing: -0.011em;
 }
 
 @layer base {
   h1, h2, h3, h4 {
-    letter-spacing: 0;
+    letter-spacing: -0.02em;
   }
 }
 

@@ -108,7 +108,7 @@ export function OnboardingPage({
                  className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
                  value={identity.deviceName}
                  onChange={(e) => onIdentityChange({ ...identity, deviceName: e.target.value })}
-                 placeholder="Riley's Laptop"
+                 placeholder="Riley’s Laptop"
                />
              </div>
           </div>

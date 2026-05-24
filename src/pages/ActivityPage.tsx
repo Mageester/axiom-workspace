@@ -33,19 +33,6 @@ function formatTime(value: string): string {
   }).format(new Date(value));
 }
 
-function eventLabel(type: string): string {
-  switch (type) {
-    case "session_created": return "Work started";
-    case "session_ended": return "Work finished";
-    case "session_updated": return "Note edited";
-    case "note_added": return "Note added";
-    case "snapshot_created": return "Snapshot saved";
-    case "sync_completed": return "Workspace synced";
-    case "repo_refreshed": return "Repo refreshed";
-    default: return type.replace(/_/g, " ");
-  }
-}
-
 function EventIcon({ type }: { type: string }) {
   switch (type) {
     case "session_created": return <Timer size={12} className="text-status-clean" />;
@@ -63,7 +50,7 @@ function isErrorEvent(event: WorkspaceEvent): boolean {
   return Boolean(payload.error) || Boolean(payload.lastCommandError);
 }
 
-export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNotes }: ActivityPageProps) {
+export function ActivityPage({ events }: ActivityPageProps) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
 
   const sortedEvents = useMemo(
@@ -73,19 +60,27 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
 
   const filteredEvents = useMemo(() => {
     let filtered = sortedEvents;
-    switch (filter) {
-      case "sessions":
-        filtered = sortedEvents.filter((e) => SESSION_TYPES.includes(e.type));
-        break;
-      case "sync":
-        filtered = sortedEvents.filter((e) => SYNC_TYPES.includes(e.type));
-        break;
-      case "repos":
-        filtered = sortedEvents.filter((e) => REPO_TYPES.includes(e.type));
-        break;
-      case "errors":
-        filtered = sortedEvents.filter(isErrorEvent);
-        break;
+
+    // For "all" view, we filter out automated clutter events to keep it high-signal human timeline
+    if (filter === "all") {
+      filtered = sortedEvents.filter(
+        (e) => e.type !== "sync_completed" && e.type !== "snapshot_created" && e.type !== "repo_refreshed"
+      );
+    } else {
+      switch (filter) {
+        case "sessions":
+          filtered = sortedEvents.filter((e) => SESSION_TYPES.includes(e.type));
+          break;
+        case "sync":
+          filtered = sortedEvents.filter((e) => SYNC_TYPES.includes(e.type));
+          break;
+        case "repos":
+          filtered = sortedEvents.filter((e) => REPO_TYPES.includes(e.type));
+          break;
+        case "errors":
+          filtered = sortedEvents.filter(isErrorEvent);
+          break;
+      }
     }
 
     // Suppress consecutive automated sync events that clutter the view
@@ -103,7 +98,7 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
     return deduplicated.slice(0, 50);
   }, [sortedEvents, filter]);
 
-  // Group events by human-friendly date labels
+  // Group events by date labels
   const groupedEvents = useMemo(() => {
     const groups: { dateLabel: string; items: WorkspaceEvent[] }[] = [];
     filteredEvents.forEach((event) => {
@@ -143,7 +138,6 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
         description="A quiet history of what's been happening in the workspace."
       />
 
-      {/* Narrower Readable content column: max-w-2xl */}
       <main className="max-w-2xl mx-auto p-6 md:p-8 space-y-6">
         <div className="flex items-center gap-1 p-1 bg-surface-1 border border-border/20 rounded-xl w-fit">
           {(Object.keys(FILTER_LABELS) as ActivityFilter[]).map((key) => (
@@ -169,7 +163,6 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
           <div className="space-y-6">
             {groupedEvents.map((group) => (
               <div key={group.dateLabel} className="space-y-2.5">
-                {/* Clean Uppercase Date Header */}
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-text-muted pl-2 border-l border-accent/60">
                   {group.dateLabel}
                 </div>
@@ -194,8 +187,8 @@ export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNot
                           ) : null;
                         })()}
                         {/* Timestamps placed close inline with event info */}
-                        <p className="text-[10px] text-text-muted mt-0.5 font-medium">
-                          {eventLabel(event.type)} · {formatTime(event.createdAt)}
+                        <p className="text-[10px] text-text-muted mt-0.5">
+                          {formatTime(event.createdAt)}
                         </p>
                       </div>
                     </div>

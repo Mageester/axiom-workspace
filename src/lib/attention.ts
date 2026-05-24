@@ -77,11 +77,17 @@ export function computeAttentionItems(
   }
 
   const teammateSessionsByRepo = new Map<string, WorkSession[]>();
-  const sessionsByUserAndRepo = new Map<string, WorkSession[]>();
+  const sessionsByUserAndRepo = new Map<string, { user: string; repoId: string; repoName: string; sessions: WorkSession[] }>();
+
   for (const session of activeSessions) {
     const displayName = normalizeDisplayName(session.userName);
     const sessionKey = `${displayName.toLowerCase()}-${session.repoId}`;
-    sessionsByUserAndRepo.set(sessionKey, [...(sessionsByUserAndRepo.get(sessionKey) || []), session]);
+
+    if (!sessionsByUserAndRepo.has(sessionKey)) {
+      sessionsByUserAndRepo.set(sessionKey, { user: displayName, repoId: session.repoId, repoName: session.repoName, sessions: [] });
+    }
+    sessionsByUserAndRepo.get(sessionKey)!.sessions.push(session);
+
     if (!samePerson(session.userName, currentUser)) {
       const existing = teammateSessionsByRepo.get(session.repoId) || [];
       existing.push(session);
@@ -89,19 +95,7 @@ export function computeAttentionItems(
     }
   }
 
-  for (const sessions of sessionsByUserAndRepo.values()) {
-    if (sessions.length > 1) {
-      const displayName = normalizeDisplayName(sessions[0].userName);
-      items.push({
-        id: `duplicate-session-${displayName}-${sessions[0].repoId}`,
-        title: "Duplicate active sessions",
-        description: `${displayName} has ${sessions.length} active sessions on ${sessions[0].repoName}.`,
-        severity: "warning",
-        projectId: sessions[0].repoId,
-      });
-    }
-  }
-
+  // Teammates active on same project check
   const myActiveRepos = new Set(
     activeSessions
       .filter(s => samePerson(s.userName, currentUser))
@@ -121,31 +115,49 @@ export function computeAttentionItems(
     }
   }
 
-  const longSessions = new Map<string, WorkSession[]>();
-  for (const session of activeSessions) {
-    if (samePerson(session.userName, currentUser)) continue;
-    const elapsed = Date.now() - new Date(session.startedAt).getTime();
-    const hours = elapsed / (1000 * 60 * 60);
-    if (hours > 6) {
-    const user = normalizeDisplayName(session.userName);
-    const key = `${user.toLowerCase()}-${session.repoId}`;
-      longSessions.set(key, [...(longSessions.get(key) || []), session]);
-    }
-  }
+  // Intelligent duplicate and long session warning grouping
+  for (const { user, repoId, repoName, sessions } of sessionsByUserAndRepo.values()) {
+    const isMe = samePerson(user, currentUser);
 
-  for (const sessions of longSessions.values()) {
-    const user = normalizeDisplayName(sessions[0].userName);
-    const longestHours = Math.max(...sessions.map((session) => Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 36e5)));
-    items.push({
-      id: `long-session-${user}-${sessions[0].repoId}`,
-      title: sessions.length > 1 ? `${user} has long-running sessions` : `${user} has a long-running session`,
-      description: sessions.length > 1
-        ? `${sessions[0].repoName} · ${sessions.length} sessions · longest ${longestHours}h`
-        : `${sessions[0].repoName} · ${longestHours}h`,
-      severity: "info",
-      actionLabel: "Review",
-      projectId: sessions[0].repoId,
+    // We only check long sessions for teammates
+    const longRunningSessions = sessions.filter(s => {
+      if (isMe) return false;
+      const elapsed = Date.now() - new Date(s.startedAt).getTime();
+      return elapsed / 36e5 > 6;
     });
+
+    const hasDuplicate = sessions.length > 1;
+    const hasLong = longRunningSessions.length > 0;
+    const longestHours = Math.max(...sessions.map(s => Math.floor((Date.now() - new Date(s.startedAt).getTime()) / 36e5)));
+
+    if (hasDuplicate && hasLong) {
+      items.push({
+        id: `long-session-${user}-${repoId}`, // Kept in sync with test expectations (user matches normalized name, repoId matches project ID)
+        title: `${user} has duplicate long-running sessions`,
+        description: `${repoName} · ${sessions.length} sessions · longest ${longestHours}h`,
+        severity: "warning",
+        actionLabel: "Review",
+        projectId: repoId,
+      });
+    } else if (hasDuplicate) {
+      items.push({
+        id: `duplicate-session-${user}-${repoId}`,
+        title: "Duplicate active sessions",
+        description: `${user} has ${sessions.length} active sessions on ${repoName}.`,
+        severity: "warning",
+        actionLabel: "Review",
+        projectId: repoId,
+      });
+    } else if (hasLong) {
+      items.push({
+        id: `long-session-${user}-${repoId}`,
+        title: `${user} has a long-running session`,
+        description: `${repoName} · ${longestHours}h`,
+        severity: "info",
+        actionLabel: "Review",
+        projectId: repoId,
+      });
+    }
   }
 
   for (const project of registeredProjects) {
