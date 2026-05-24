@@ -356,6 +356,22 @@ export function loadSyncSettings(): SyncSettings {
           typeof parsed.syncLocalPath === "string"
             ? parsed.syncLocalPath
             : setupState.syncLocalPath,
+        cloudSyncEndpoint:
+          typeof parsed.cloudSyncEndpoint === "string"
+            ? parsed.cloudSyncEndpoint
+            : undefined,
+        cloudSyncDeviceToken:
+          typeof parsed.cloudSyncDeviceToken === "string"
+            ? parsed.cloudSyncDeviceToken
+            : undefined,
+        cloudSyncLastCheckedAt:
+          typeof parsed.cloudSyncLastCheckedAt === "string"
+            ? parsed.cloudSyncLastCheckedAt
+            : undefined,
+        cloudSyncLastError:
+          typeof parsed.cloudSyncLastError === "string"
+            ? parsed.cloudSyncLastError
+            : undefined,
         autoSyncEnabled: parsed.autoSyncEnabled !== false,
         syncIntervalSeconds:
           typeof parsed.syncIntervalSeconds === "number" &&

@@ -44,6 +44,8 @@ export type ProjectSafetyLabel =
   | "teammate_active"
   | "needs_sync"
   | "clone_required"
+  | "conflict"
+  | "status_unavailable"
   | "not_configured";
 
 export interface ProjectSafety {

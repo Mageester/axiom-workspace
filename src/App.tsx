@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { RepoDiscoveryModal } from "./components/RepoDiscoveryModal";
+import { CommandPalette } from "./components/CommandPalette";
 import { TodayPage } from "./pages/TodayPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ActivityPage } from "./pages/ActivityPage";
@@ -63,13 +64,15 @@ import {
   validateSyncWriteAccess,
   type UpdateCheckResult,
 } from "./lib/sync";
-import { discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
+import { cloneRepo, discoverLocalRepos, filterDiscoverableRepos, getRepoProfile, loadRepoPaths, pullRepo as invokePullRepo } from "./lib/repos";
+import { CloudflareWorkspaceAdapter, LocalWorkspaceAdapter, slugifyProjectName } from "./lib/workspace-adapter";
+import type { CommandItem, HandoffNote, RegisteredProject } from "./types/workspace";
 
 import { initTray, updateTrayTooltip, destroyTray, destroyWidgetWindow, openMainWindow, createWidgetWindow, broadcastWidgetState, broadcastNotification } from "./lib/tray";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.4.0";
 const FOCUSED_SYNC_MS = 30 * 1000;
 const BLURRED_SYNC_MS = 180 * 1000;
 
@@ -143,6 +146,30 @@ function formatEventDescription(event: WorkspaceEvent): string {
   }
 }
 
+function projectFromRepo(repo: { id: string; name: string; path: string; currentBranch: string }): Omit<RegisteredProject, "id" | "createdAt" | "updatedAt"> {
+  return {
+    name: repo.name,
+    slug: slugifyProjectName(repo.name),
+    repoUrl: "",
+    defaultBranch: repo.currentBranch || "main",
+    localPath: repo.path,
+    installStatus: "installed",
+    isActive: true,
+  };
+}
+
+function mergeProjects(existing: RegisteredProject[], incoming: RegisteredProject[]): RegisteredProject[] {
+  const byKey = new Map<string, RegisteredProject>();
+  for (const project of existing) {
+    byKey.set((project.localPath || project.repoUrl || project.slug).toLowerCase(), project);
+  }
+  for (const project of incoming) {
+    const key = (project.localPath || project.repoUrl || project.slug).toLowerCase();
+    byKey.set(key, { ...byKey.get(key), ...project });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function App() {
   const [activeNav, setActiveNav] = useState<NavPage>("today");
   const [sessions, setSessions] = useState<WorkSession[]>(() => loadSessions());
@@ -152,6 +179,10 @@ function App() {
   const [syncSettings, setSyncSettings] = useState<SyncSettings>(() => loadSyncSettings());
   const [checklist, setChecklist] = useState<SetupChecklistItem[]>(() => createChecklist(loadSetupState()));
   const [repoNicknames, setRepoNicknames] = useState<Record<string, string>>(() => loadRepoNicknames());
+  const [registeredProjects, setRegisteredProjects] = useState<RegisteredProject[]>([]);
+  const [handoffNotes, setHandoffNotes] = useState<HandoffNote[]>([]);
+  const [cloudSyncUnavailable, setCloudSyncUnavailable] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupChecking, setSetupChecking] = useState(false);
@@ -177,6 +208,7 @@ function App() {
   const autoConnectAttemptedRef = useRef(false);
   const autoAddReposAttemptedRef = useRef(false);
   const identityAutoFilledRef = useRef(false);
+  const localWorkspaceAdapterRef = useRef(new LocalWorkspaceAdapter());
 
   const {
     repos,
@@ -193,6 +225,11 @@ function App() {
   });
 
   const activeSessions = useMemo(() => getActiveSessions(sessions), [sessions]);
+  const cloudAdapter = useMemo(() => {
+    const endpoint = syncSettings.cloudSyncEndpoint?.trim();
+    const token = syncSettings.cloudSyncDeviceToken?.trim();
+    return endpoint && token ? new CloudflareWorkspaceAdapter(endpoint, token) : null;
+  }, [syncSettings.cloudSyncDeviceToken, syncSettings.cloudSyncEndpoint]);
 
   // Tray widget state
   const trayRepoSummaries = useMemo((): TrayRepoSummary[] =>
@@ -339,6 +376,64 @@ function App() {
     syncSettingsRef.current = syncSettings;
     setChecklist(createChecklist(setupState));
   }, [sessions, events, setupState, syncSettings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [projects, handoffs] = await Promise.all([
+        localWorkspaceAdapterRef.current.getProjects(),
+        localWorkspaceAdapterRef.current.getHandoffs(),
+      ]);
+      if (!cancelled) {
+        setRegisteredProjects(projects);
+        setHandoffNotes(handoffs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (repos.length === 0) return;
+    void (async () => {
+      const existing = await localWorkspaceAdapterRef.current.getProjects();
+      const knownPaths = new Set(existing.map((project) => project.localPath?.toLowerCase()).filter(Boolean));
+      const created: RegisteredProject[] = [];
+      for (const repo of repos) {
+        if (knownPaths.has(repo.path.toLowerCase())) continue;
+        const project = await localWorkspaceAdapterRef.current.addProject(projectFromRepo(repo));
+        created.push(project);
+      }
+      if (created.length > 0) {
+        setRegisteredProjects(mergeProjects(existing, created));
+      } else {
+        setRegisteredProjects(existing);
+      }
+    })();
+  }, [repos]);
+
+  useEffect(() => {
+    if (!cloudAdapter) {
+      setCloudSyncUnavailable(false);
+      return;
+    }
+    let cancelled = false;
+    void cloudAdapter
+      .getProjects()
+      .then((projects) => {
+        if (!cancelled) {
+          setCloudSyncUnavailable(false);
+          setRegisteredProjects((current) => mergeProjects(current, projects));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCloudSyncUnavailable(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAdapter]);
 
   useEffect(() => {
     void runSetupCheck(false);
@@ -506,7 +601,8 @@ function App() {
     return session;
   }
 
-  function finishSession(sessionId: string, endNote?: string) {
+  function finishSession(sessionId: string, summary?: string, details?: string) {
+    const endNote = [summary, details].filter(Boolean).join("\n\n") || undefined;
     setSessions(prev => {
       const next = endSession(prev, sessionId, endNote);
       saveSessions(next);
@@ -514,10 +610,41 @@ function App() {
       if (endedSession?.endedAt) {
         const event = createWorkspaceEvent("session_ended", { sessionId, endedAt: endedSession.endedAt, endNote: endedSession.endNote }, setupState.identity);
         setEvents(eventPrev => { const eventNext = dedupeEvents([...eventPrev, event]); saveEvents(eventNext); return eventNext; });
+        if (summary || details) {
+          void saveHandoff(endedSession, summary, details);
+        }
         scheduleAutoSync();
       }
       return next;
     });
+  }
+
+  async function saveHandoff(session: WorkSession, summary?: string, details?: string) {
+    const noteInput = {
+      projectId: session.repoId,
+      sessionId: session.id,
+      authorUserName: setupState.identity.userName,
+      summary,
+      details,
+    };
+    const note = await localWorkspaceAdapterRef.current.addHandoff(noteInput);
+    setHandoffNotes((prev) => [note, ...prev.filter((item) => item.id !== note.id)]);
+
+    const event = createWorkspaceEvent("note_added", { handoff: note, repoName: session.repoName }, setupState.identity);
+    setEvents((prev) => {
+      const next = dedupeEvents([...prev, event]);
+      saveEvents(next);
+      return next;
+    });
+
+    if (cloudAdapter) {
+      try {
+        await cloudAdapter.addHandoff(noteInput);
+        setCloudSyncUnavailable(false);
+      } catch {
+        setCloudSyncUnavailable(true);
+      }
+    }
   }
 
   function scheduleAutoSync() {
@@ -567,21 +694,170 @@ function App() {
     }
   }
 
+  async function addRegisteredProject(name: string, repoUrl: string, defaultBranch: string) {
+    const projectInput: Omit<RegisteredProject, "id" | "createdAt" | "updatedAt"> = {
+      name,
+      slug: slugifyProjectName(name),
+      repoUrl,
+      defaultBranch,
+      installStatus: "not_installed",
+      isActive: true,
+    };
+    const project = await localWorkspaceAdapterRef.current.addProject(projectInput);
+    setRegisteredProjects((prev) => mergeProjects(prev, [project]));
+    if (cloudAdapter) {
+      try {
+        await cloudAdapter.addProject(projectInput);
+        setCloudSyncUnavailable(false);
+      } catch {
+        setCloudSyncUnavailable(true);
+      }
+    }
+  }
+
+  async function cloneRegisteredProject(project: RegisteredProject) {
+    if (!project.repoUrl.trim()) {
+      window.alert("This project does not have a repo URL yet.");
+      return;
+    }
+
+    const suggestedParent = syncSettings.syncLocalPath || `${setupState.identity.deviceName || "Axiom"} Workspace`;
+    const parentDir = window.prompt("Choose a parent workspace folder for the clone.", suggestedParent);
+    if (!parentDir?.trim()) return;
+
+    const folderName = slugifyProjectName(project.slug || project.name);
+    const result = await cloneRepo(project.repoUrl, parentDir.trim(), folderName);
+    if (!result.ok) {
+      window.alert("Unable to clone this repo.\nCheck that Git is installed and that this device has access to the repository.");
+      return;
+    }
+
+    try {
+      await addRepo(result.localPath);
+      const updated = await localWorkspaceAdapterRef.current.updateProject(project.id, {
+        localPath: result.localPath,
+        installStatus: "installed",
+      });
+      setRegisteredProjects((prev) => mergeProjects(prev, [updated]));
+      await refreshRepo(result.localPath);
+      const event = createWorkspaceEvent("repo_refreshed", { repoPath: result.localPath, projectName: project.name, action: "clone_latest" }, setupState.identity);
+      setEvents((prev) => {
+        const next = dedupeEvents([...prev, event]);
+        saveEvents(next);
+        return next;
+      });
+    } catch (error) {
+      window.alert(formatError(error, "The repo cloned, but Axiom could not add it to Projects."));
+    }
+  }
+
   function handleFullLocalReset() {
     clearAxiomLocalStorage();
     window.location.reload();
   }
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const commandItems = useMemo<CommandItem[]>(() => {
+    const mySession = activeSessions.find((session) => session.userName.toLowerCase() === setupState.identity.userName.toLowerCase());
+    const missingProject = registeredProjects.find((project) => project.installStatus === "not_installed");
+    const firstRepo = repos[0];
+    return [
+      {
+        id: "start-work",
+        label: "Start work",
+        description: "Pick a project",
+        category: "work",
+        action: () => setActiveNav("today"),
+        keywords: ["session", "begin", "today"],
+      },
+      {
+        id: "finish-work",
+        label: "Finish work",
+        description: mySession?.repoName ?? "No active work",
+        category: "work",
+        action: () => {
+          if (mySession) finishSession(mySession.id);
+        },
+        keywords: ["handoff", "done", "stop"],
+      },
+      {
+        id: "open-projects",
+        label: "Open project",
+        description: firstRepo?.name ?? "Projects",
+        category: "project",
+        action: () => setActiveNav("projects"),
+        keywords: ["repo", "folder"],
+      },
+      {
+        id: "clone-missing-project",
+        label: "Clone missing project",
+        description: missingProject?.name ?? "No missing projects",
+        category: "project",
+        action: () => {
+          if (missingProject) void cloneRegisteredProject(missingProject);
+          else setActiveNav("projects");
+        },
+        keywords: ["latest", "install", "repo"],
+      },
+      {
+        id: "sync-now",
+        label: "Sync now",
+        description: cloudSyncUnavailable ? "Cloud sync unavailable" : "Refresh workspace state",
+        category: "system",
+        action: () => void handleSyncNow(false),
+        keywords: ["cloud", "refresh"],
+      },
+      {
+        id: "refresh-projects",
+        label: "Refresh projects",
+        description: `${repos.length} tracked`,
+        category: "project",
+        action: () => void refreshAll(),
+        keywords: ["status", "git"],
+      },
+      {
+        id: "add-project",
+        label: "Add project",
+        description: "Register a repo",
+        category: "project",
+        action: () => setActiveNav("projects"),
+        keywords: ["register", "new"],
+      },
+      {
+        id: "view-activity",
+        label: "View activity",
+        category: "navigation",
+        action: () => setActiveNav("activity"),
+      },
+      {
+        id: "open-settings",
+        label: "Open settings",
+        category: "navigation",
+        action: () => setActiveNav("settings"),
+      },
+    ];
+  }, [activeSessions, cloudSyncUnavailable, registeredProjects, repos, setupState.identity.userName, refreshAll]);
+
   function renderPage() {
     switch (activeNav) {
       case "today":
-        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} setupState={setupState} syncSettings={syncSettings} syncStatus={syncStatus} loading={loading} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onNavigate={setActiveNav} />;
+        return <TodayPage repos={repos} activeSessions={activeSessions} recentEvents={events} defaultUserName={setupState.identity.userName} setupState={setupState} syncSettings={syncSettings} syncStatus={syncStatus} loading={loading} registeredProjects={registeredProjects} cloudSyncUnavailable={cloudSyncUnavailable} onSyncNow={handleSyncNow} onStartSession={startSession} onFinishSession={finishSession} onNavigate={setActiveNav} />;
       case "projects":
-        return <ProjectsPage repos={repos} repoNicknames={repoNicknames} activeSessions={activeSessions} loading={loading} refreshingPaths={refreshingPaths} pullingPaths={pullingPaths} onRefreshAll={refreshAll} onRefreshRepo={refreshRepo} onAddRepo={addRepo} onRemoveRepo={removeRepo} onRenameRepo={setRepoNickname} onStartSession={startSession} onPullRepo={handlePullRepo} getRepoSessions={r => activeSessions.filter(s => s.repoId === r.id)} defaultUserName={setupState.identity.userName} />;
+        return <ProjectsPage repos={repos} registeredProjects={registeredProjects} repoNicknames={repoNicknames} activeSessions={activeSessions} loading={loading} refreshingPaths={refreshingPaths} pullingPaths={pullingPaths} onRefreshAll={refreshAll} onRefreshRepo={refreshRepo} onAddRepo={addRepo} onAddProject={addRegisteredProject} onCloneProject={cloneRegisteredProject} onRemoveRepo={removeRepo} onRenameRepo={setRepoNickname} onStartSession={startSession} onFinishSession={finishSession} onPullRepo={handlePullRepo} getRepoSessions={r => activeSessions.filter(s => s.repoId === r.id)} defaultUserName={setupState.identity.userName} />;
       case "activity":
-        return <ActivityPage events={events} syncSettings={syncSettings} repoDiagnostics={repoDiagnostics} />;
+        return <ActivityPage events={events} syncSettings={syncSettings} repoDiagnostics={repoDiagnostics} handoffNotes={handoffNotes} />;
       case "settings":
-        return <SettingsPage setupState={setupState} checklist={checklist} settings={syncSettings} syncStatus={syncStatus} eventCount={events.length} appVersion={APP_VERSION} gitVersion={gitVersion} repoCount={repos.length} activeSessionCount={activeSessions.length} repoDiagnostics={repoDiagnostics} onIdentityChange={persistIdentity} onSetupChange={persistSetupState} onSettingsChange={persistSyncSettings} onValidateSetup={() => runSetupCheck(true)} onSyncNow={handleSyncNow} onResetSetup={() => { persistSetupState(resetSetupState()); setActiveNav("today"); }} onResetSessionsAndLocks={() => { setSessions([]); saveSessions([]); }} onResetSyncState={() => { const r = resetSyncState(); persistSetupState(r.setupState); persistSyncSettings(r.syncSettings); }} onFullLocalReset={handleFullLocalReset} onResetDismissedSuggestions={() => {}} />;
+        return <SettingsPage setupState={setupState} checklist={checklist} settings={syncSettings} syncStatus={syncStatus} eventCount={events.length} appVersion={APP_VERSION} gitVersion={gitVersion} repoCount={repos.length} registeredProjectCount={registeredProjects.length} activeSessionCount={activeSessions.length} repoDiagnostics={repoDiagnostics} cloudSyncUnavailable={cloudSyncUnavailable} onIdentityChange={persistIdentity} onSetupChange={persistSetupState} onSettingsChange={persistSyncSettings} onValidateSetup={() => runSetupCheck(true)} onSyncNow={handleSyncNow} onResetSetup={() => { persistSetupState(resetSetupState()); setActiveNav("today"); }} onResetSessionsAndLocks={() => { setSessions([]); saveSessions([]); }} onResetSyncState={() => { const r = resetSyncState(); persistSetupState(r.setupState); persistSyncSettings(r.syncSettings); }} onFullLocalReset={handleFullLocalReset} onResetDismissedSuggestions={() => {}} />;
       default:
         return null;
     }
@@ -595,6 +871,7 @@ function App() {
     <div className="flex h-screen bg-surface-0">
       <Sidebar activeItem={activeNav} onNavigate={setActiveNav} setupComplete={setupState.setupComplete} activeSessionCount={activeSessions.length} syncStatus={syncStatus} syncSettings={syncSettings} />
       <RepoDiscoveryModal open={showDiscoveryModal} onClose={() => setShowDiscoveryModal(false)} onAddRepo={addRepo} />
+      <CommandPalette open={commandPaletteOpen} commands={commandItems} onClose={() => setCommandPaletteOpen(false)} />
       {renderPage()}
     </div>
   );

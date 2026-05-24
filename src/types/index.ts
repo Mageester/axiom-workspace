@@ -219,6 +219,10 @@ export interface SetupState {
 export interface SyncSettings {
   syncRepoUrl: string;
   syncLocalPath: string;
+  cloudSyncEndpoint?: string;
+  cloudSyncDeviceToken?: string;
+  cloudSyncLastCheckedAt?: string;
+  cloudSyncLastError?: string;
   autoSyncEnabled: boolean;
   syncIntervalSeconds: number;
   autoRefreshReposEnabled: boolean;

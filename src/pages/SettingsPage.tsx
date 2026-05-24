@@ -29,8 +29,10 @@ interface SettingsPageProps {
   appVersion: string;
   gitVersion: string;
   repoCount: number;
+  registeredProjectCount: number;
   activeSessionCount: number;
   repoDiagnostics: RepoDiagnostics;
+  cloudSyncUnavailable: boolean;
   onIdentityChange: (identity: DeviceIdentity) => void;
   onSetupChange: (setupState: SetupState) => void;
   onSettingsChange: (settings: SyncSettings) => void;
@@ -91,8 +93,10 @@ export function SettingsPage({
   appVersion,
   gitVersion,
   repoCount,
+  registeredProjectCount,
   activeSessionCount,
   repoDiagnostics,
+  cloudSyncUnavailable,
   onIdentityChange,
   onSetupChange,
   onSettingsChange,
@@ -112,7 +116,8 @@ export function SettingsPage({
   const diagnostics = [
     { label: "App version", value: appVersion },
     { label: "Git version", value: gitVersion || "Not checked" },
-    { label: "Tracked Repos", value: String(repoCount) },
+    { label: "Installed projects", value: String(repoCount) },
+    { label: "Registered projects", value: String(registeredProjectCount) },
     { label: "Active Sessions", value: String(activeSessionCount) },
     { label: "Logged Events", value: String(eventCount) },
     { label: "Last sync", value: formatDateTime(settings.lastSyncAt) },
@@ -182,6 +187,48 @@ export function SettingsPage({
               />
             </div>
           </div>
+        </section>
+
+        {/* 2. Cloud Sync Section */}
+        <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+              Cloud Sync
+            </h3>
+            <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+              settings.cloudSyncEndpoint && settings.cloudSyncDeviceToken
+                ? cloudSyncUnavailable ? "bg-status-dirty/10 text-status-dirty" : "bg-status-clean/10 text-status-clean"
+                : "bg-surface-2 text-text-muted"
+            }`}>
+              {settings.cloudSyncEndpoint && settings.cloudSyncDeviceToken
+                ? cloudSyncUnavailable ? "Unavailable" : "Configured"
+                : "Local mode"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Worker Endpoint</label>
+              <input
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-mono text-text-primary outline-none transition-all"
+                value={settings.cloudSyncEndpoint || ""}
+                onChange={(e) => onSettingsChange({ ...settings, cloudSyncEndpoint: e.target.value.trim(), cloudSyncLastError: undefined })}
+                placeholder="https://axiom-workspace-api.example.workers.dev"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Token</label>
+              <input
+                className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-mono text-text-primary outline-none transition-all"
+                type="password"
+                value={settings.cloudSyncDeviceToken || ""}
+                onChange={(e) => onSettingsChange({ ...settings, cloudSyncDeviceToken: e.target.value.trim(), cloudSyncLastError: undefined })}
+                placeholder="Stored locally on this device"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-text-muted leading-relaxed">
+            Cloudflare stores workspace state only. Source code and Git credentials stay on this device.
+          </p>
         </section>
 
         {/* 2. Automation Section */}

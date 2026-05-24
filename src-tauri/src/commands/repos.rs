@@ -730,7 +730,7 @@ fn clone_repo_inner(repo_url: &str, parent_dir: &str, folder_name: &str) -> Clon
         }
     }
 
-    let ctx = GitContext::new();
+    let ctx = RepoCheckContext::new();
     let target_str = target.to_string_lossy().to_string();
 
     match ctx.git_command_cwd(

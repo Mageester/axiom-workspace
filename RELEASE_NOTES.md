@@ -1,3 +1,30 @@
+# Axiom Workspace v1.4.0 — Command Layer
+
+Overview:
+Axiom Workspace v1.4.0 moves the app from a repo/session dashboard into a daily internal command layer for Aidan and Riley.
+
+Highlights:
+- Cloudflare Worker + D1 backend foundation for operational state
+- Local-first Project Registry with Cloudflare adapter boundaries
+- Clone Latest flow for registered projects missing on a device
+- Needs Attention system for sync, repo, teammate, stale session, and missing project signals
+- Safe to Start / Review First project states
+- Cleaner project quick actions with technical details hidden by default
+- Ctrl+K command palette for common workspace actions
+- Finish Work handoff notes saved locally and mirrored through the adapter when configured
+- Improved Activity copy with readable handoff events
+- Settings/Setup center with Profile, Cloud Sync, Automation, Diagnostics, and Advanced sections
+- Stronger daily workflow while preserving tray icon, widget, and notifications
+
+Backend notes:
+- Worker endpoints use `{ ok, data }` / `{ ok, error }` envelopes.
+- Device auth stores only SHA-256 token hashes in D1.
+- Source code, GitHub tokens, and device tokens are not uploaded or committed.
+- Cloudflare remains optional; the app opens in local/cache mode when the backend is unavailable.
+
+Validation:
+- Pending final verification for production build, tests, Rust check, and backend typecheck.
+
 # Axiom Workspace v1.3.1 — Interface Precision & Daily Polish
 
 Overview:

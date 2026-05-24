@@ -41,7 +41,7 @@ export function assessProjectSafety(
   }
 
   if (repo.status === "error") {
-    return { label: "review_first", displayText: "Review first", canStart: false };
+    return { label: "status_unavailable", displayText: "Status unavailable", canStart: false };
   }
 
   return { label: "safe_to_start", displayText: "Safe to start", canStart: true };
@@ -54,6 +54,8 @@ export function safetyColor(label: ProjectSafetyLabel): string {
     case "teammate_active": return "text-status-dirty";
     case "review_first": return "text-status-dirty";
     case "needs_sync": return "text-status-behind";
+    case "conflict": return "text-status-locked";
+    case "status_unavailable": return "text-status-dirty";
     case "clone_required": return "text-text-muted";
     case "not_configured": return "text-text-muted";
   }
@@ -66,6 +68,8 @@ export function safetyBgColor(label: ProjectSafetyLabel): string {
     case "teammate_active": return "bg-status-dirty/10";
     case "review_first": return "bg-status-dirty/10";
     case "needs_sync": return "bg-status-behind/10";
+    case "conflict": return "bg-status-locked/10";
+    case "status_unavailable": return "bg-status-dirty/10";
     case "clone_required": return "bg-surface-2";
     case "not_configured": return "bg-surface-2";
   }

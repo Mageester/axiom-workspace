@@ -143,6 +143,7 @@ export function ReposPage({
                 refreshing={refreshingPaths.has(repo.path)}
                 pulling={pullingPaths.has(repo.path)}
                 activeSessions={getRepoSessions(repo)}
+                currentUser={defaultUserName}
                 onRefresh={() => onRefreshRepo(repo.path)}
                 onRemove={() => onRemoveRepo(repo.path)}
                 onRename={(name) => onRenameRepo(repo.path, name)}

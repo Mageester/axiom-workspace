@@ -33,6 +33,7 @@ interface TodayPageProps {
   syncStatus: SyncStatus;
   loading: boolean;
   registeredProjects: RegisteredProject[];
+  cloudSyncUnavailable: boolean;
   onSyncNow: () => Promise<void>;
   onStartSession: (input: CreateSessionInput) => void;
   onFinishSession: (sessionId: string, summary?: string, details?: string) => void;
@@ -95,6 +96,7 @@ export function TodayPage({
   syncStatus,
   loading,
   registeredProjects,
+  cloudSyncUnavailable,
   onSyncNow,
   onStartSession,
   onFinishSession,
@@ -121,11 +123,12 @@ export function TodayPage({
   }, [activeSessions, defaultUserName]);
 
   const attentionItems = useMemo(
-    () => computeAttentionItems(repos, activeSessions, defaultUserName, registeredProjects),
-    [repos, activeSessions, defaultUserName, registeredProjects],
+    () => computeAttentionItems(repos, activeSessions, defaultUserName, registeredProjects, syncSettings, cloudSyncUnavailable),
+    [repos, activeSessions, defaultUserName, registeredProjects, syncSettings, cloudSyncUnavailable],
   );
 
   const syncing = syncStatus !== "idle" && syncStatus !== "complete" && syncStatus !== "error";
+  const hasProjects = repos.length > 0 || registeredProjects.length > 0;
 
   const recentImportant = useMemo(() => {
     return [...recentEvents]
@@ -154,7 +157,7 @@ export function TodayPage({
             <div className="flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${syncing ? "bg-status-behind animate-pulse" : syncStatus === "error" ? "bg-status-locked" : "bg-status-clean"}`} />
               <span className="text-[10px] font-medium text-text-muted">
-                {syncing ? "Syncing" : `Synced ${timeAgo(syncSettings.lastSyncAt)}`}
+                {cloudSyncUnavailable ? "Cloud sync unavailable" : syncing ? "Syncing" : `Synced ${timeAgo(syncSettings.lastSyncAt)}`}
               </span>
             </div>
             <button
@@ -207,7 +210,7 @@ export function TodayPage({
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Current Work</p>
               <p className="text-sm text-text-secondary">
-                No active session. Pick a project to start working.
+                {hasProjects ? "No active session. Pick a project to start working." : "Workspace clear. Add a project when you are ready."}
               </p>
             </div>
             <button

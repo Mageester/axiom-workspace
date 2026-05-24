@@ -501,6 +501,26 @@ async function handleCreateHandoff(
   return json(note, 201);
 }
 
+async function handleListHandoffs(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const projectId = url.searchParams.get("project_id");
+
+  const result = projectId
+    ? await env.AXIOM_DB.prepare(
+        "SELECT * FROM handoff_notes WHERE project_id = ? ORDER BY created_at DESC LIMIT 100"
+      )
+        .bind(projectId)
+        .all<HandoffNote>()
+    : await env.AXIOM_DB.prepare(
+        "SELECT * FROM handoff_notes ORDER BY created_at DESC LIMIT 100"
+      ).all<HandoffNote>();
+
+  return json(result.results);
+}
+
 async function handleRegisterDevice(
   request: Request,
   env: Env
@@ -785,6 +805,10 @@ export default {
         (params = matchRoute("GET", "/activity", method, pathname))
       ) {
         response = await handleListActivity(request, env);
+      } else if (
+        (params = matchRoute("GET", "/handoffs", method, pathname))
+      ) {
+        response = await handleListHandoffs(request, env);
       } else if (
         (params = matchRoute("GET", "/sync/pull", method, pathname))
       ) {

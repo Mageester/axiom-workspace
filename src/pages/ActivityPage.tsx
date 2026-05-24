@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Activity, AlertCircle, Clock, GitBranch, RefreshCw, Timer, Upload } from "lucide-react";
 import type { RepoDiagnostics, SyncSettings, WorkspaceEvent, WorkspaceEventType } from "../types";
+import type { HandoffNote } from "../types/workspace";
 import { PageHeader } from "../components/PageHeader";
 
 type ActivityFilter = "all" | "sessions" | "sync" | "repos" | "errors";
@@ -21,6 +22,7 @@ interface ActivityPageProps {
   events: WorkspaceEvent[];
   syncSettings: SyncSettings;
   repoDiagnostics: RepoDiagnostics;
+  handoffNotes: HandoffNote[];
 }
 
 function formatTime(value: string): string {
@@ -72,6 +74,10 @@ function eventDescription(event: WorkspaceEvent): string {
     case "session_ended": {
       return payload.endNote ? `finished work — ${payload.endNote}` : "finished work";
     }
+    case "note_added": {
+      const handoff = payload.handoff as { summary?: string; details?: string } | undefined;
+      return handoff?.summary ? `handoff: ${handoff.summary}` : "left a handoff note";
+    }
     case "sync_completed":
       return "workspace synced successfully";
     case "repo_refreshed": {
@@ -83,7 +89,7 @@ function eventDescription(event: WorkspaceEvent): string {
   }
 }
 
-export function ActivityPage({ events, syncSettings, repoDiagnostics }: ActivityPageProps) {
+export function ActivityPage({ events, syncSettings, repoDiagnostics, handoffNotes }: ActivityPageProps) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
 
   const sortedEvents = useMemo(
