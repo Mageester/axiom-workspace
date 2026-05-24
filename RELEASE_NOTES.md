@@ -1,3 +1,22 @@
+# Axiom Workspace v1.5.1 — Experience Finish
+
+Overview:
+v1.5.1 finalizes the v1.5.0 rewrite with visual polish, tight action hierarchies, and polished empty states for a complete desktop experience.
+
+Highlights:
+- final Home layout polish
+- improved Now card composition
+- improved project action hierarchy
+- clearer Review / Finish / Open actions
+- typography and spacing refinement
+- Projects launcher polish
+- Settings copy polish
+- GitHub sync capitalization fix
+- sidebar refinement
+- command palette preservation
+- tray/widget preservation
+- local-first and Cloudflare foundation preserved
+
 # Axiom Workspace v1.5.0 — Workspace Experience Rewrite
 
 Overview:

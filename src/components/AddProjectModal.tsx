@@ -59,7 +59,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
 
         <div className="p-5 space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">GitHub URL</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">GitHub URL</label>
             <input
               className="w-full h-9 px-3 rounded-lg bg-surface-0 border border-border/40 focus:border-accent/40 text-xs text-text-primary outline-none transition-all placeholder:text-text-muted font-mono"
               placeholder="https://github.com/org/repo"
@@ -71,7 +71,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Display Name</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Display Name</label>
               <input
                 className="w-full h-9 px-3 rounded-lg bg-surface-0 border border-border/40 focus:border-accent/40 text-xs text-text-primary outline-none transition-all placeholder:text-text-muted"
                 placeholder="Axiom Site"
@@ -80,7 +80,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Default Branch</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Default Branch</label>
               <div className="relative">
                 <GitBranch size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input

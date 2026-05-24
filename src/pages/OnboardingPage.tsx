@@ -67,7 +67,7 @@ export function OnboardingPage({
         <div className="space-y-8">
           <img src={axiomMark} alt="Axiom" className="h-12 w-12 object-contain" />
           <div className="space-y-4">
-            <h1 className="text-5xl font-bold text-text-primary tracking-tight">
+            <h1 className="text-5xl font-bold text-text-primary">
               Axiom <span className="text-accent">Workspace</span>
             </h1>
             <p className="text-lg text-text-secondary leading-relaxed max-w-md">
@@ -94,7 +94,7 @@ export function OnboardingPage({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div className="space-y-2">
-               <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Your Name</label>
+               <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Your Name</label>
                <input
                  className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
                  value={identity.userName}
@@ -103,12 +103,12 @@ export function OnboardingPage({
                />
              </div>
              <div className="space-y-2">
-               <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Device Name</label>
+               <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Device Name</label>
                <input
                  className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
                  value={identity.deviceName}
                  onChange={(e) => onIdentityChange({ ...identity, deviceName: e.target.value })}
-                 placeholder="Riley Laptop"
+                 placeholder="Riley's Laptop"
                />
              </div>
           </div>

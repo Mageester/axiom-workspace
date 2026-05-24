@@ -137,7 +137,7 @@ export function StartSessionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md">
       <div className="w-full max-w-xl rounded-3xl border border-border/50 bg-surface-1 shadow-2xl overflow-hidden">
         <div className="px-8 py-6 border-b border-border/30 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-text-primary tracking-tight">Start Work</h2>
+          <h2 className="text-xl font-bold text-text-primary">Start Work</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-2 rounded-full transition-colors text-text-muted">
             <X size={20} />
           </button>
@@ -146,7 +146,7 @@ export function StartSessionModal({
         <div className="p-8 space-y-8">
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Project</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Project</label>
               <select
                 className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
                 value={repoId}
@@ -159,7 +159,7 @@ export function StartSessionModal({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Work Title</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Work Title</label>
               <input
                 className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
                 value={title}
@@ -170,7 +170,7 @@ export function StartSessionModal({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Target Area</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Target Area</label>
               <input
                 className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all font-mono text-sm"
                 value={targets[0]?.value || ""}

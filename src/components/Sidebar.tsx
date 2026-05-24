@@ -81,9 +81,10 @@ export function Sidebar({
       </nav>
 
       {/* Compact Connection Card */}
-      <div className="p-2">
-        <div className="rounded-lg border border-border/15 bg-surface-2/10 p-2.5 space-y-1.5">
-          <div className="flex items-center gap-1.5">
+      {activeItem !== "today" && (
+        <div className="p-2">
+          <div className="rounded-lg border border-border/15 bg-surface-2/10 p-2.5 space-y-1.5">
+            <div className="flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${sync.dotClass}`} />
             <span className={`text-[9px] font-bold ${sync.textClass}`}>
               {sync.label}
@@ -95,6 +96,7 @@ export function Sidebar({
           </p>
         </div>
       </div>
+      )}
     </aside>
   );
 }

@@ -161,7 +161,7 @@ export function SettingsPage({
         {/* 1. Identity Section */}
         <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               Identity Profile
             </h3>
             {isIdentityChanged && (
@@ -191,7 +191,7 @@ export function SettingsPage({
                 className="w-full h-9 px-3 rounded-lg bg-surface-1 border border-border/40 focus:border-accent/40 text-xs font-semibold text-text-primary outline-none transition-all"
                 value={identityDraft.deviceName}
                 onChange={(e) => setIdentityDraft({ ...identityDraft, deviceName: e.target.value })}
-                placeholder="Riley Laptop"
+                placeholder="Riley's Laptop"
               />
             </div>
           </div>
@@ -200,7 +200,7 @@ export function SettingsPage({
         {/* 2. Sync Mode Section */}
         <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               Sync Mode
             </h3>
             <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
@@ -260,7 +260,7 @@ export function SettingsPage({
 
         {/* 2. Automation Section */}
         <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Workspace Automation
           </h3>
           
@@ -293,7 +293,7 @@ export function SettingsPage({
 
         {/* 3. Health & Diagnostics Summary */}
         <section className="space-y-4 p-4 md:p-5 rounded-2xl border border-border/20 bg-surface-1/40">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Workspace Diagnostics
           </h3>
           
@@ -332,7 +332,7 @@ export function SettingsPage({
             onClick={() => setAdvancedOpen(!advancedOpen)}
           >
             {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <span className="text-[9px] font-bold uppercase tracking-widest">Advanced Configuration</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Advanced Configuration</span>
           </button>
 
           {advancedOpen && (
@@ -352,7 +352,7 @@ export function SettingsPage({
 
               {/* Danger Zone */}
               <div className="p-4 rounded-xl border border-status-locked/15 bg-status-locked/5 space-y-3">
-                <h4 className="text-[9px] font-bold uppercase tracking-widest text-status-locked">Danger Zone</h4>
+                <h4 className="text-[9px] font-bold uppercase tracking-wider text-status-locked">Danger Zone</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   <button
                     className="h-8.5 px-3 rounded-lg bg-status-locked/5 border border-status-locked/20 text-[10px] font-bold text-status-locked hover:bg-status-locked/10 transition-all text-left"
@@ -383,7 +383,7 @@ export function SettingsPage({
 
               {/* Logs */}
               <div className="p-3.5 rounded-xl border border-border/20 bg-surface-1/20 font-mono">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-text-muted mb-1.5">Last System Error</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Last System Error</p>
                 <p className="text-[10px] text-status-locked break-all leading-relaxed">{lastError}</p>
               </div>
             </div>

@@ -71,7 +71,7 @@ export function FinishWorkModal({
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                 What changed? <span className="text-text-muted/60 normal-case tracking-normal font-medium">optional</span>
               </label>
               <input
@@ -85,7 +85,7 @@ export function FinishWorkModal({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                 Anything the team should know? <span className="text-text-muted/60 normal-case tracking-normal font-medium">optional</span>
               </label>
               <textarea

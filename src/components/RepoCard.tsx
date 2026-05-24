@@ -112,7 +112,7 @@ export function RepoCard({
             />
           ) : (
             <div className="flex items-center gap-1.5">
-              <h3 className="truncate text-sm font-bold text-text-primary tracking-tight">{displayName}</h3>
+              <h3 className="truncate text-sm font-bold text-text-primary">{displayName}</h3>
               <button
                 className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-surface-2 rounded"
                 onClick={() => { setEditValue(displayName); setEditing(true); setTimeout(() => editRef.current?.focus(), 0); }}

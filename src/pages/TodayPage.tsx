@@ -181,7 +181,7 @@ export function TodayPage({
   );
   const recentImportant = useMemo(
     () => [...recentEvents]
-      .filter((event) => event.type !== "sync_completed" && event.type !== "snapshot_created")
+      .filter((event) => event.type !== "sync_completed" && event.type !== "snapshot_created" && event.type !== "repo_refreshed")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 3),
     [recentEvents],
@@ -253,34 +253,40 @@ export function TodayPage({
           <div className="rounded-2xl border border-border/30 bg-surface-1/70 p-5 shadow-2xl shadow-black/20">
             <p className="text-[11px] font-bold text-text-muted">Now</p>
             {myActiveSession ? (
-              <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
-                  <h2 className="text-2xl font-semibold tracking-tight text-text-primary">You are working on {myActiveSession.repoName}</h2>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
-                    <span className="flex items-center gap-1.5"><GitBranch size={14} />{myActiveSession.branch || "main"}</span>
-                    <span className="flex items-center gap-1.5"><Clock size={14} />{durationLabel(myActiveSession.startedAt)}</span>
-                    {myRepo && myRepo.changedFileCount > 0 && <span className="text-status-dirty">{formatChangedFiles(myRepo.changedFileCount)}</span>}
+                  <h2 className="text-2xl font-semibold text-text-primary">You are working on {myActiveSession.repoName}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
+                    <span>{myActiveSession.branch || "main"}</span>
+                    <span>&middot;</span>
+                    <span>{durationLabel(myActiveSession.startedAt)}</span>
+                    {myRepo && myRepo.changedFileCount > 0 && (
+                      <>
+                        <span>&middot;</span>
+                        <span className="text-status-dirty">{formatChangedFiles(myRepo.changedFileCount)}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="h-10 rounded-xl bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => setFinishModalOpen(true)}>
-                    <Square size={12} className="mr-1.5 inline" fill="currentColor" />Finish Work
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className="h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => setFinishModalOpen(true)}>
+                    Finish Work
                   </button>
-                  {myRepo && <button className="h-10 rounded-xl border border-border/40 bg-surface-2 px-4 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenInCode(myRepo.path)}><Code2 size={13} className="mr-1.5 inline" />Open in VS Code</button>}
-                  {myRepo && <button className="h-10 rounded-xl border border-border/40 bg-surface-2 px-4 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenTerminal(myRepo.path)}><Terminal size={13} className="mr-1.5 inline" />Terminal</button>}
+                  {myRepo && <button className="h-9 rounded-lg border border-border/40 bg-surface-2 px-3 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenInCode(myRepo.path)}>Open in VS Code</button>}
+                  {myRepo && <button className="h-9 rounded-lg border border-border/40 bg-surface-2 px-3 text-xs font-bold text-text-primary hover:bg-surface-3" onClick={() => void onOpenTerminal(myRepo.path)}>Terminal</button>}
                 </div>
               </div>
             ) : (
-              <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-text-primary">You are not working</h2>
-                  <p className="mt-2 text-sm text-text-secondary">
+                  <h2 className="text-2xl font-semibold text-text-primary">You are not working</h2>
+                  <p className="mt-1.5 text-sm text-text-secondary">
                     {suggestedItem ? `Start from ${suggestedItem.name}, or pick any project below.` : "Add your first Axiom project to begin."}
                   </p>
                 </div>
                 {suggestedItem && !suggestedItem.cloneRequired && (
-                  <button className="h-10 rounded-xl bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => startItem(suggestedItem)}>
-                    <Play size={13} className="mr-1.5 inline" fill="currentColor" />Start Work
+                  <button className="h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover" onClick={() => startItem(suggestedItem)}>
+                    Start Work
                   </button>
                 )}
               </div>
@@ -316,9 +322,15 @@ export function TodayPage({
           </div>
           <div className="divide-y divide-border/15">
             {launcherItems.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-sm font-semibold text-text-primary">Add your first Axiom project</p>
-                <p className="mt-2 text-xs text-text-muted">Projects appear here as launchable rows once registered or discovered.</p>
+              <div className="flex flex-col items-center justify-center p-12 text-center">
+                <p className="text-base font-semibold text-text-primary">Add your first Axiom project</p>
+                <p className="mt-2 max-w-xs text-xs text-text-muted">Projects appear here as launchable rows once registered or discovered.</p>
+                <button
+                  className="mt-6 h-9 rounded-lg bg-accent px-4 text-xs font-bold text-white hover:bg-accent-hover"
+                  onClick={() => onNavigate("projects")}
+                >
+                  Add Project
+                </button>
               </div>
             ) : launcherItems.map((item) => (
               <div key={item.id} className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition hover:bg-surface-2/25">
@@ -332,14 +344,27 @@ export function TodayPage({
                   {item.teammateSession && <span className="truncate text-status-dirty">{normalizeDisplayName(item.teammateSession.userName)}</span>}
                 </div>
                 <div className="flex items-center justify-end gap-2">
-                  {item.repo && <button title="Open in VS Code" className="hidden h-8 w-8 place-items-center rounded-lg text-text-muted hover:bg-surface-3 hover:text-text-primary md:grid" onClick={() => void onOpenInCode(item.repo!.path)}><Code2 size={14} /></button>}
-                  {item.repo && <button title="Open folder" className="hidden h-8 w-8 place-items-center rounded-lg text-text-muted hover:bg-surface-3 hover:text-text-primary md:grid" onClick={() => void onOpenFolder(item.repo!.path)}><FolderOpen size={14} /></button>}
                   <button
-                    className={`h-8 rounded-lg px-3 text-[11px] font-bold ${item.needsReview && !item.session ? "bg-status-dirty/10 text-status-dirty hover:bg-status-dirty/15" : "bg-accent text-white hover:bg-accent-hover"}`}
+                    className={`h-8 rounded-lg px-3 text-[11px] font-bold transition-colors ${
+                      item.session ? "bg-accent text-white hover:bg-accent-hover" :
+                      item.cloneRequired ? "bg-surface-2 text-text-primary hover:bg-surface-3 border border-border/40" :
+                      item.needsReview ? "bg-status-dirty/10 text-status-dirty hover:bg-status-dirty/20 border border-status-dirty/20" :
+                      "bg-accent text-white hover:bg-accent-hover"
+                    }`}
                     onClick={() => primaryAction(item)}
                   >
                     {item.session ? "Finish" : item.cloneRequired ? "Clone Latest" : item.needsReview ? "Review" : "Start"}
                   </button>
+                  {item.repo && (
+                    <button className="hidden h-8 rounded-lg border border-border/40 bg-surface-2 px-3 text-[11px] font-bold text-text-secondary hover:bg-surface-3 hover:text-text-primary md:block" onClick={() => void onOpenInCode(item.repo!.path)}>
+                      Open
+                    </button>
+                  )}
+                  {item.repo && (
+                    <button className="hidden h-8 rounded-lg border border-border/40 bg-surface-2 px-3 text-[11px] font-bold text-text-secondary hover:bg-surface-3 hover:text-text-primary md:block" onClick={() => void onOpenTerminal(item.repo!.path)}>
+                      Terminal
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

@@ -148,7 +148,7 @@ export function TrayWidget({
           <div>
             {mySession ? (
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-accent">Working</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-accent">Working</p>
                 <p className="text-sm font-semibold text-text-primary truncate">{mySession.repoName}</p>
                 <p className="text-[11px] text-text-muted">{mySession.branch || "main"} · {formatElapsed(mySession.startedAt)}</p>
                 <button
@@ -168,7 +168,7 @@ export function TrayWidget({
           {/* Teammates */}
           {teammates.length > 0 && (
             <div className="space-y-2 pt-4 border-t border-border/30">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Teammates</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Teammates</p>
               <div className="space-y-3">
                 {teammates.map(([name, sessions]) => {
                   const longest = [...sessions].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())[0];
