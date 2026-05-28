@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<RepoStatus, { label: string; tooltip: string; classN
   error: {
     label: "Needs Attention",
     tooltip: "Something went wrong checking this repo. See details below.",
-    className: "bg-status-locked/15 text-status-locked border-status-locked/30",
+    className: "bg-status-dirty/15 text-status-dirty border-status-dirty/30",
   },
 };
 

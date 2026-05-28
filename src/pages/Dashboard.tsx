@@ -267,7 +267,11 @@ export function Dashboard({
       });
     }
     return items.filter((item) => !dismissed.has(item.id)).slice(0, 3);
-  }, [activeSessions, defaultUserName, onSyncNow, repos, syncSettings.dismissedSuggestions, syncSettings.lastSyncAt]);
+  }, [
+    activeSessions, defaultUserName, repos,
+    syncSettings.dismissedSuggestions, syncSettings.lastSyncAt,
+    onSyncNow, setSessionRepo,
+  ]);
 
   const topRecentEvents = useMemo(
     () =>

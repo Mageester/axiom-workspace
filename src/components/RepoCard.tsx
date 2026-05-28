@@ -18,25 +18,33 @@ import {
   X,
 } from "lucide-react";
 import { revealItemInDir, openPath } from "@tauri-apps/plugin-opener";
-import type { LiveRepo, WorkSession } from "../types";
-import { getRepoDisplayName } from "../lib/repos";
-import { analyzeRepo } from "../lib/intelligence";
+import type { LiveRepo, RepoChangeKind, RepoFileCategory, WorkSession } from "../types";
+import { StatusBadge } from "./StatusBadge";
+import { RepoIntelligenceBadge, RiskLevelBadge } from "./RepoIntelligenceBadge";
+import { iconBtnClass, secondaryBtnClass } from "../lib/constants";
+import { getRepoDescription, getRepoDisplayName } from "../lib/repos";
+import { analyzeRepo, categoryLabel } from "../lib/intelligence";
 
-async function openFolder(path: string) {
-  try {
-    await revealItemInDir(path);
-  } catch {
-    try {
-      await openPath(path);
-    } catch {}
-  }
+interface RepoCardProps {
+  repo: LiveRepo;
+  nickname?: string;
+  refreshing: boolean;
+  pulling?: boolean;
+  activeSessions: WorkSession[];
+  onRefresh: () => void;
+  onRemove: () => void;
+  onStartSession: () => void;
+  onPull?: () => void;
+  onRename?: (name: string) => void;
 }
 
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {}
-}
+const changeKindLabels: Record<RepoChangeKind, string> = {
+  added: "Added",
+  deleted: "Deleted",
+  modified: "Modified",
+  renamed: "Renamed",
+  untracked: "Untracked",
+};
 
 function formatLastChecked(value: string): string {
   const numeric = Number(value);
@@ -56,27 +64,24 @@ function formatLastChecked(value: string): string {
   }).format(date);
 }
 
-interface RepoCardProps {
-  repo: LiveRepo;
-  nickname?: string;
-  refreshing: boolean;
-  pulling?: boolean;
-  activeSessions: WorkSession[];
-  onRefresh: () => void;
-  onRemove: () => void;
-  onStartSession: () => void;
-  onPull?: () => void;
-  onRename?: (name: string) => void;
+async function openFolder(path: string) {
+  try {
+    await revealItemInDir(path);
+  } catch {
+    try {
+      await openPath(path);
+    } catch {
+      // Silently fail if opener is unavailable
+    }
+  }
 }
 
-function getHumanStatus(repo: LiveRepo): string {
-  if (repo.status === "error") return "Needs attention";
-  if (repo.hasUncommittedChanges) {
-    return `${repo.changedFileCount} file${repo.changedFileCount === 1 ? "" : "s"} changed`;
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard API not available in some contexts
   }
-  if (repo.behind > 0) return "Behind remote";
-  if (repo.status === "clean") return "Clean";
-  return repo.status;
 }
 
 export function RepoCard({
@@ -92,29 +97,73 @@ export function RepoCard({
   onRename,
 }: RepoCardProps) {
   const hasActiveSessions = activeSessions.length > 0;
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(repo.status === "dirty");
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
   const hasDirtyFiles = repo.status === "dirty" && repo.changedFileCount > 0;
   const displayName = getRepoDisplayName(repo, nickname);
+  const description = getRepoDescription(repo);
+  const hasDetails =
+    hasDirtyFiles ||
+    repo.status === "error" ||
+    repo.upstreamStatus === "missing" ||
+    repo.upstreamStatus === "error" ||
+    repo.behind > 0;
   const intelligence = useMemo(() => analyzeRepo(repo), [repo]);
-  const humanStatus = getHumanStatus(repo);
+  const groupedFiles = useMemo(() => {
+    const groups = new Map<RepoFileCategory, typeof repo.changedFiles>();
+    for (const file of intelligence.classifiedFiles) {
+      const existing = groups.get(file.category) ?? [];
+      existing.push(file);
+      groups.set(file.category, existing);
+    }
+    const order: RepoFileCategory[] = [
+      "source_code", "config", "deployment", "generated",
+      "local_tooling", "screenshots", "docs", "unknown",
+    ];
+    return order
+      .filter((cat) => (groups.get(cat)?.length ?? 0) > 0)
+      .map((cat) => ({ category: cat, files: groups.get(cat)! }));
+  }, [intelligence]);
+  const detailSummary = useMemo(() => {
+    if (hasDirtyFiles) {
+      return `${repo.changedFileCount} changed file${
+        repo.changedFileCount === 1 ? "" : "s"
+      }`;
+    }
+    if (repo.status === "error") {
+      return "Needs attention";
+    }
+    if (repo.behind > 0) {
+      return `${repo.behind} update${repo.behind === 1 ? "" : "s"} available`;
+    }
+    if (repo.upstreamStatus === "missing") {
+      return "No remote branch";
+    }
+    return "Details";
+  }, [hasDirtyFiles, repo]);
+
+  useEffect(() => {
+    if (repo.status === "dirty") {
+      setDetailsOpen(true);
+    }
+  }, [repo.lastCheckedAt, repo.status]);
 
   return (
     <div
-      className={`group rounded-2xl border bg-surface-1 p-6 transition-all hover:border-border-hover shadow-sm ${
-        hasActiveSessions ? "border-accent/30 ring-1 ring-accent/10" : "border-border/60"
+      className={`rounded-lg border bg-surface-1 p-5 transition-colors hover:border-border-hover ${
+        hasActiveSessions ? "border-status-dirty/50" : "border-border"
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
+      <div className="mb-3 flex items-start justify-between">
+        <div className="mr-3 min-w-0 flex-1">
           {editing ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <input
                 ref={editRef}
-                className="w-full rounded-lg border border-accent bg-surface-0 px-3 py-1 text-sm font-medium text-text-primary outline-none"
+                className="w-full rounded border border-accent bg-surface-0 px-1.5 py-0.5 text-sm font-medium text-text-primary outline-none"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -125,166 +174,293 @@ export function RepoCard({
                   if (e.key === "Escape") setEditing(false);
                 }}
               />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <h3 className="truncate text-lg font-semibold text-text-primary tracking-tight">
-                {displayName}
-              </h3>
               <button
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-surface-2 rounded"
+                className={iconBtnClass}
+                title="Save"
                 onClick={() => {
-                  setEditValue(displayName);
-                  setEditing(true);
-                  setTimeout(() => editRef.current?.focus(), 0);
+                  onRename?.(editValue);
+                  setEditing(false);
                 }}
               >
-                <Pencil size={12} className="text-text-muted" />
+                <Check size={12} />
+              </button>
+              <button
+                className={iconBtnClass}
+                title="Cancel"
+                onClick={() => setEditing(false)}
+              >
+                <X size={12} />
               </button>
             </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-medium text-text-primary">
+                {displayName}
+              </h3>
+              {onRename && (
+                <button
+                  className={`${iconBtnClass} shrink-0`}
+                  title="Edit display name"
+                  onClick={() => {
+                    setEditValue(displayName);
+                    setEditing(true);
+                    setTimeout(() => editRef.current?.select(), 0);
+                  }}
+                >
+                  <Pencil size={10} />
+                </button>
+              )}
+            </div>
           )}
-          <div className="mt-1 flex items-center gap-2 text-xs text-text-muted">
-            <span className="truncate max-w-[200px]">{repo.path}</span>
+          <div className="mt-1 flex items-center gap-1.5 min-w-0">
+            <p className="truncate text-xs text-text-muted">{repo.path}</p>
             <button
-              className="hover:text-text-secondary transition-colors"
+              className={`${iconBtnClass} shrink-0`}
+              title={copied ? "Copied!" : "Copy path"}
               onClick={() => {
                 void copyToClipboard(repo.path);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               }}
             >
-              {copied ? <Check size={12} className="text-status-clean" /> : <Copy size={12} />}
+              <Copy size={10} />
             </button>
           </div>
+          {description && (
+            <p className="mt-1 text-xs text-text-secondary">{description}</p>
+          )}
         </div>
-
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          <span className={`text-sm font-medium ${
-            repo.status === "clean" ? "text-status-clean" : 
-            repo.status === "error" ? "text-status-locked" : "text-status-dirty"
-          }`}>
-            {humanStatus}
-          </span>
-          <div className="flex items-center gap-1">
-             <button
-              onClick={() => void openFolder(repo.path)}
-              className="p-1.5 hover:bg-surface-2 rounded-lg text-text-muted transition-colors"
-              title="Open folder"
-            >
-              <FolderOpen size={14} />
-            </button>
-            <button
-              onClick={onRefresh}
-              disabled={refreshing}
-              className="p-1.5 hover:bg-surface-2 rounded-lg text-text-muted transition-colors"
-            >
-              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-            </button>
-          </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <StatusBadge status={repo.status} />
+          <RepoIntelligenceBadge safetyState={intelligence.safetyState} riskLevel={intelligence.riskLevel} />
+          <RiskLevelBadge riskLevel={intelligence.riskLevel} />
+          <button
+            onClick={() => void openFolder(repo.path)}
+            className={iconBtnClass}
+            title="Open folder"
+          >
+            <FolderOpen size={12} />
+          </button>
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            className={iconBtnClass}
+            title={refreshing ? "Refreshing repo status" : "Refresh repo status"}
+          >
+            {refreshing ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <RefreshCw size={12} />
+            )}
+          </button>
+          <button
+                onClick={() => {
+              if (window.confirm(`Remove ${displayName} from Axiom? This does not delete the repo folder.`)) {
+                onRemove();
+              }
+            }}
+            className={`${iconBtnClass} hover:!text-status-locked`}
+            title="Remove repo from Axiom"
+          >
+            <Trash2 size={12} />
+          </button>
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-between border-t border-border/40 pt-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-text-secondary bg-surface-2 px-2 py-1 rounded-md">
-            <GitBranch size={12} />
-            <span className="font-medium">{repo.currentBranch || "main"}</span>
-          </div>
-          {hasActiveSessions && (
-            <div className="flex -space-x-1">
-              {activeSessions.slice(0, 3).map((s, i) => (
-                <div key={s.id} className="w-5 h-5 rounded-full bg-accent border-2 border-surface-1 flex items-center justify-center text-[10px] font-bold text-white" title={s.userName}>
-                  {s.userName[0]}
-                </div>
-              ))}
+      {repo.status === "error" && repo.errorMessage && (
+        <div className="mb-3 flex items-start gap-2 rounded border border-status-locked/20 bg-status-locked/10 px-2 py-1.5">
+          <AlertCircle
+            size={12}
+            className="mt-0.5 shrink-0 text-status-locked"
+          />
+          <p className="text-xs text-status-locked">{repo.errorMessage}</p>
+        </div>
+      )}
+
+      {hasDirtyFiles && (
+        <div className="mb-3 rounded-md border border-status-dirty/30 bg-status-dirty/10 px-3 py-2">
+          <div className="flex items-start gap-2">
+            <FileText size={13} className="mt-0.5 shrink-0 text-status-dirty" />
+            <div>
+              <p className="text-sm font-medium text-status-dirty">
+                You have unsaved changes
+              </p>
+              <p className="mt-0.5 text-xs leading-5 text-text-secondary">
+                {repo.changedFileCount} file{repo.changedFileCount === 1 ? "" : "s"} changed but not committed yet.
+              </p>
             </div>
-          )}
+          </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          {repo.behind > 0 && onPull && (
-            <button
-              className="h-8 px-3 rounded-lg bg-status-behind/10 text-status-behind text-xs font-medium hover:bg-status-behind/20 transition-colors flex items-center gap-1.5"
-              onClick={onPull}
-              disabled={pulling}
-            >
-              {pulling ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-              Pull
-            </button>
-          )}
-          <button
-            className="h-8 px-4 rounded-lg bg-surface-2 text-text-primary text-xs font-semibold hover:bg-surface-3 transition-colors"
-            onClick={onStartSession}
-          >
-            Start Work
-          </button>
+      {hasActiveSessions && (
+        <div className="mb-3 rounded-md border border-status-dirty/30 bg-status-dirty/10 px-3 py-2">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-status-dirty">
+            <Timer size={12} />
+            {activeSessions.length} active session
+            {activeSessions.length === 1 ? "" : "s"}
+          </div>
+          <div className="space-y-1">
+            {activeSessions.slice(0, 3).map((session) => (
+              <p key={session.id} className="truncate text-xs text-text-secondary">
+                {session.userName}: {session.title}
+              </p>
+            ))}
+            {activeSessions.length > 3 && (
+              <p className="text-xs text-text-muted">
+                +{activeSessions.length - 3} more
+              </p>
+            )}
+          </div>
         </div>
+      )}
+
+      <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <GitBranch size={12} />
+          <span className="font-mono">{repo.currentBranch || "-"}</span>
+        </div>
+        {repo.isGitRepo && (repo.ahead > 0 || repo.behind > 0) && (
+          <span className="text-xs text-text-muted">
+            {repo.ahead > 0 && `${repo.ahead} to push`}
+            {repo.ahead > 0 && repo.behind > 0 && " · "}
+            {repo.behind > 0 && `${repo.behind} to pull`}
+          </span>
+        )}
       </div>
 
-      {(hasDirtyFiles || repo.status === "error" || hasActiveSessions) && (
-        <div className="mt-4">
-          <button
-            className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
-            onClick={() => setDetailsOpen(!detailsOpen)}
-          >
-            {detailsOpen ? "Hide details" : "Show details"}
-          </button>
-          
-          {detailsOpen && (
-            <div className="mt-3 space-y-3 p-3 rounded-xl bg-surface-0/50 border border-border/30">
-               {repo.status === "error" && repo.errorMessage && (
-                <div className="flex items-start gap-2 text-xs text-status-locked">
-                  <AlertCircle size={14} className="shrink-0" />
-                  <p>{repo.errorMessage}</p>
-                </div>
-              )}
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-text-muted">
+        <span>Last checked {formatLastChecked(repo.lastCheckedAt)}</span>
+        {refreshing && (
+          <span className="inline-flex items-center gap-1 text-accent">
+            <Loader2 size={11} className="animate-spin" />
+            Checking
+          </span>
+        )}
+      </div>
 
-              {hasActiveSessions && (
-                <div className="space-y-2">
-                  <p className="text-[10px] uppercase tracking-wider font-bold text-text-muted">Active Work</p>
-                  {activeSessions.map(s => (
-                    <div key={s.id} className="text-xs text-text-secondary">
-                      <span className="font-medium text-text-primary">{s.userName}</span>: {s.title}
+      {hasDetails && (
+        <div className="mt-3 border-t border-border pt-3">
+          <button
+            className="flex w-full items-center justify-between gap-3 text-left text-xs text-text-secondary hover:text-text-primary"
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            <span>{detailSummary}</span>
+            {detailsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+
+          {detailsOpen && (
+            <div className="mt-3 space-y-3">
+              {hasDirtyFiles && groupedFiles.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                    Changed files ({repo.changedFileCount})
+                  </p>
+                  {groupedFiles.map(({ category, files }) => (
+                    <div key={category}>
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="text-xs font-medium text-text-secondary">
+                          {categoryLabel(category)}
+                        </span>
+                        <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-muted">
+                          {files.length}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {files.slice(0, 5).map((file) => (
+                          <div
+                            key={`${file.kind}-${file.path}`}
+                            className="flex items-start gap-2 rounded border border-border bg-surface-0 px-2 py-1.5"
+                          >
+                            <span className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
+                              {changeKindLabels[file.kind]}
+                            </span>
+                            <span className="min-w-0 break-all font-mono text-xs text-text-secondary">
+                              {file.oldPath
+                                ? `${file.oldPath} -> ${file.path}`
+                                : file.path}
+                            </span>
+                          </div>
+                        ))}
+                        {files.length > 5 && (
+                          <p className="text-[11px] text-text-muted">
+                            +{files.length - 5} more {categoryLabel(category).toLowerCase()} files
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
+                  {repo.hasMoreChangedFiles && (
+                    <p className="text-xs text-text-muted">
+                      Showing first {repo.changedFiles.length} of{" "}
+                      {repo.changedFileCount} changed files.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {hasDirtyFiles && (
-                <div className="space-y-2">
-                   <p className="text-[10px] uppercase tracking-wider font-bold text-text-muted">Changed Files</p>
-                   <div className="max-h-32 overflow-y-auto space-y-1">
-                      {repo.changedFiles.slice(0, 10).map(f => (
-                        <div key={f.path} className="text-[11px] font-mono text-text-secondary flex items-center gap-2">
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            f.kind === "added" ? "bg-status-clean" : 
-                            f.kind === "deleted" ? "bg-status-locked" : "bg-status-dirty"
-                          }`} />
-                          <span className="truncate">{f.path}</span>
-                        </div>
-                      ))}
-                      {repo.changedFileCount > 10 && (
-                        <p className="text-[10px] text-text-muted">+{repo.changedFileCount - 10} more files</p>
-                      )}
-                   </div>
+              {repo.behind > 0 && (
+                <div className="rounded border border-status-behind/30 bg-status-behind/10 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs leading-5 text-status-behind">
+                      {repo.behind} new commit{repo.behind === 1 ? "" : "s"} available from the remote.
+                    </p>
+                    {onPull && (
+                      <button
+                        className={`${secondaryBtnClass} shrink-0`}
+                        onClick={onPull}
+                        disabled={pulling}
+                        title="Download the latest changes from the remote"
+                      >
+                        {pulling ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Download size={12} />
+                        )}
+                        Pull Latest
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-between border-t border-border/20">
-                <span className="text-[10px] text-text-muted">Last checked {formatLastChecked(repo.lastCheckedAt)}</span>
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Remove ${displayName} from Axiom?`)) onRemove();
-                  }}
-                  className="text-[10px] text-status-locked hover:underline"
-                >
-                  Remove Project
-                </button>
-              </div>
+              {repo.upstreamStatus === "missing" && (
+                <p className="rounded border border-border bg-surface-0 px-2 py-1.5 text-xs leading-5 text-text-muted">
+                  No remote branch set up yet. Push this branch first to enable
+                  update tracking.
+                </p>
+              )}
+
+              {repo.upstreamStatus === "error" && repo.upstreamErrorMessage && (
+                <p className="rounded border border-status-locked/30 bg-status-locked/10 px-2 py-1.5 text-xs leading-5 text-status-locked">
+                  {repo.upstreamErrorMessage}
+                </p>
+              )}
             </div>
           )}
         </div>
       )}
+
+      {intelligence.riskLevel !== "none" && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-surface-0 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-text-primary">
+              {intelligence.nextAction}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-4 text-text-muted">
+              {intelligence.recommendation}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <button
+        className={`${secondaryBtnClass} mt-4 w-full justify-center`}
+        onClick={onStartSession}
+      >
+        <Play size={14} />
+        Start Work
+      </button>
     </div>
   );
 }

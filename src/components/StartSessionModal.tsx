@@ -30,6 +30,32 @@ interface FormErrors {
   targets?: string;
 }
 
+function formatTargetType(type: LockTarget["type"]): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function overlapSeverityLabel(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "Critical";
+    case "high":
+      return "High";
+    default:
+      return "Medium";
+  }
+}
+
+function overlapSeverityClass(severity: SessionOverlap["severity"]): string {
+  switch (severity) {
+    case "critical":
+      return "border-status-locked/30 bg-status-locked/15 text-status-locked";
+    case "high":
+      return "border-status-dirty/30 bg-status-dirty/15 text-status-dirty";
+    default:
+      return "border-status-behind/30 bg-status-behind/15 text-status-behind";
+  }
+}
+
 export function StartSessionModal({
   open,
   repos,
@@ -76,7 +102,22 @@ export function StartSessionModal({
   }
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setRepoId("");
+      setUserName("");
+      setTitle("");
+      setNotes("");
+      setBranch("");
+      setTargetType("area");
+      setTargetValue("");
+      setTargets([]);
+      setErrors({});
+      setHasConfirmedOverlap(false);
+      setAdvancedOpen(false);
+      setTargetTouched(false);
+      return;
+    }
+
     const repo = initialRepo ?? repos[0] ?? null;
     const inferredTarget = inferTarget(repo, initialTitle ?? "");
     setRepoId(repo?.id ?? "");
@@ -89,12 +130,14 @@ export function StartSessionModal({
     setTargets(initialTargets && initialTargets.length > 0 ? initialTargets : [inferredTarget]);
     setAdvancedOpen(false);
     setTargetTouched(Boolean(initialTargets?.length));
-  }, [open, initialRepo, repos, defaultUserName, initialTitle, initialNotes, initialTargets]);
+  }, [defaultUserName, initialNotes, initialRepo, initialTargets, initialTitle, open, repos]);
 
-  const selectedRepo = useMemo(() => repos.find(r => r.id === repoId) ?? null, [repos, repoId]);
+  const selectedRepo = repos.find((repo) => repo.id === repoId) ?? null;
 
   useEffect(() => {
-    if (!open || targetTouched || !selectedRepo) return;
+    if (!open || targetTouched || !selectedRepo) {
+      return;
+    }
     const inferredTarget = inferTarget(selectedRepo, title);
     setTargetType(inferredTarget.type);
     setTargetValue(inferredTarget.value);
@@ -102,7 +145,10 @@ export function StartSessionModal({
   }, [open, selectedRepo, targetTouched, title]);
 
   const sessionInput = useMemo<CreateSessionInput | null>(() => {
-    if (!selectedRepo) return null;
+    if (!selectedRepo) {
+      return null;
+    }
+
     return {
       repoId: selectedRepo.id,
       repoName: getRepoDisplayName(selectedRepo),
@@ -113,102 +159,357 @@ export function StartSessionModal({
       branch,
       targets,
     };
-  }, [selectedRepo, userName, title, notes, branch, targets]);
+  }, [branch, notes, selectedRepo, targets, title, userName]);
 
-  const overlaps = useMemo(() => sessionInput ? detectSessionOverlap(sessionInput, activeSessions) : [], [activeSessions, sessionInput]);
+  const overlaps = useMemo<SessionOverlap[]>(
+    () =>
+      sessionInput
+        ? detectSessionOverlap(sessionInput, activeSessions)
+        : [],
+    [activeSessions, sessionInput],
+  );
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
+
+  function validateBase(): FormErrors {
+    const nextErrors: FormErrors = {};
+    if (!selectedRepo) {
+      nextErrors.repoId = "Choose a repository.";
+    }
+    if (!userName.trim()) {
+      nextErrors.userName = "Enter who is working.";
+    }
+    if (!title.trim()) {
+      nextErrors.title = "Name the work session.";
+    }
+    const effectiveTargets =
+      targets.length > 0 ? targets : [createLockTarget(targetType, targetValue)];
+    if (effectiveTargets.length === 0 || !effectiveTargets.some((target) => target.value.trim())) {
+      nextErrors.targets = "Add at least one file or area you're working on.";
+    }
+    return nextErrors;
+  }
+
+  function addTarget() {
+    const nextErrors = validateBase();
+    delete nextErrors.targets;
+
+    if (!targetValue.trim()) {
+      nextErrors.targetValue = "Enter a target value.";
+    }
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    setTargets((prev) => [...prev, createLockTarget(targetType, targetValue)]);
+    setTargetValue("");
+    setHasConfirmedOverlap(false);
+  }
+
+  function removeTarget(targetId: string) {
+    setTargets((prev) => prev.filter((target) => target.id !== targetId));
+    setHasConfirmedOverlap(false);
+  }
 
   function submit() {
-    const nextErrors: FormErrors = {};
-    if (!selectedRepo) nextErrors.repoId = "Choose a repository.";
-    if (!title.trim()) nextErrors.title = "Name the work session.";
+    const nextErrors = validateBase();
     setErrors(nextErrors);
 
-    if (Object.keys(nextErrors).length > 0 || !sessionInput) return;
+    if (Object.keys(nextErrors).length > 0 || !sessionInput) {
+      return;
+    }
+
     if (overlaps.length > 0 && !hasConfirmedOverlap) {
       setHasConfirmedOverlap(true);
       return;
     }
+
     onCreate(sessionInput);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md">
-      <div className="w-full max-w-xl rounded-3xl border border-border/50 bg-surface-1 shadow-2xl overflow-hidden">
-        <div className="px-8 py-6 border-b border-border/30 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-text-primary tracking-tight">Start Work</h2>
-          <button onClick={onClose} className="p-2 hover:bg-surface-2 rounded-full transition-colors text-text-muted">
-            <X size={20} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl border border-border/90 bg-surface-1 shadow-[0_28px_100px_rgba(0,0,0,0.45)]">
+        <div className="flex items-start justify-between border-b border-border/80 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-hover">
+              Claim work
+            </p>
+            <h2 className="mt-1 text-lg font-semibold tracking-[-0.025em] text-text-primary">
+              Start Work
+            </h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Tell Aidan and Riley what repo area you are about to touch.
+            </p>
+          </div>
+          <button className={iconBtnClass} onClick={onClose} title="Close">
+            <X size={16} />
           </button>
         </div>
 
-        <div className="p-8 space-y-8">
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Project</label>
+        <div className="space-y-5 px-5 py-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className={labelClass}>
+                Repo
+              </span>
               <select
-                className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
+                className={fieldClass}
                 value={repoId}
-                onChange={(e) => setRepoId(e.target.value)}
+                onChange={(event) => {
+                  const repo = repos.find((item) => item.id === event.target.value);
+                  setRepoId(event.target.value);
+                  setBranch(repo?.currentBranch ?? "");
+                  const inferredTarget = inferTarget(repo ?? null, title);
+                  setTargetType(inferredTarget.type);
+                  setTargetValue(inferredTarget.value);
+                  setTargets([inferredTarget]);
+                  setTargetTouched(false);
+                  setHasConfirmedOverlap(false);
+                }}
               >
-                {repos.map(r => (
-                  <option key={r.id} value={r.id}>{getRepoDisplayName(r)}</option>
+                {repos.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {getRepoDisplayName(repo)}
+                  </option>
                 ))}
               </select>
-            </div>
+              {errors.repoId && (
+                <p className="mt-1 text-xs text-status-locked">{errors.repoId}</p>
+              )}
+            </label>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Work Title</label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className={labelClass}>
+                What are you working on?
+              </span>
               <input
-                className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all"
+                className={fieldClass}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="What are you doing? e.g. 'Fix login bug'"
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Homepage hero, Pipeline auth, Contact form"
               />
-              {errors.title && <p className="text-xs text-status-locked mt-1">{errors.title}</p>}
-            </div>
+              {errors.title && (
+                <p className="mt-1 text-xs text-status-locked">{errors.title}</p>
+              )}
+            </label>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-muted">Target Area</label>
+            <label className="block">
+              <span className={labelClass}>
+                Area or file
+              </span>
               <input
-                className="w-full h-12 px-4 rounded-xl bg-surface-2 border border-border/50 focus:border-accent/50 outline-none transition-all font-mono text-sm"
-                value={targets[0]?.value || ""}
-                onChange={(e) => {
-                   setTargetTouched(true);
-                   setTargets([createLockTarget(targetType, e.target.value)]);
+                className={fieldClass}
+                value={targets[0]?.value ?? targetValue}
+                onChange={(event) => {
+                  setTargetValue(event.target.value);
+                  setTargets([createLockTarget(targetType, event.target.value)]);
+                  setTargetTouched(true);
                 }}
-                placeholder="e.g. src/components"
+                placeholder="src/components or dashboard cards"
               />
-            </div>
+              <p className="mt-1 text-xs text-text-muted">
+                Claim type: {formatTargetType(targets[0]?.type ?? targetType)}
+              </p>
+            </label>
+          </div>
+
+          <label className="block">
+            <span className={labelClass}>
+              Optional note
+            </span>
+            <textarea
+              className={`${fieldClass} min-h-20 resize-none`}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Anything the team should know?"
+            />
+          </label>
+
+          <div className="rounded-xl border border-border/80 bg-surface-0/70 p-4">
+            <button
+              className="flex w-full items-center justify-between text-left"
+              onClick={() => setAdvancedOpen((open) => !open)}
+            >
+              <div>
+                <p className="text-sm font-medium text-text-primary">
+                  Advanced
+                </p>
+                <p className="mt-0.5 text-xs text-text-muted">
+                    Change user, branch, claim type, or add more claimed areas.
+                </p>
+              </div>
+              {advancedOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+
+            {advancedOpen && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className={labelClass}>
+                      User
+                    </span>
+                    <input
+                      className={fieldClass}
+                      value={userName}
+                      onChange={(event) => setUserName(event.target.value)}
+                      placeholder="Aidan or Riley"
+                    />
+                    {errors.userName && (
+                      <p className="mt-1 text-xs text-status-locked">
+                        {errors.userName}
+                      </p>
+                    )}
+                  </label>
+
+                  <label className="block">
+                    <span className={labelClass}>
+                      Branch
+                    </span>
+                    <input
+                      className={fieldClass}
+                      value={branch}
+                      onChange={(event) => setBranch(event.target.value)}
+                      placeholder="Optional"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[150px_1fr_auto]">
+                  <select
+                    className={fieldClass}
+                    value={targetType}
+                    onChange={(event) => {
+                      const nextType = event.target.value as LockTarget["type"];
+                      setTargetType(nextType);
+                      setTargets([createLockTarget(nextType, targetValue)]);
+                      setTargetTouched(true);
+                    }}
+                  >
+                    <option value="area">Area</option>
+                    <option value="folder">Folder</option>
+                    <option value="file">File</option>
+                  </select>
+                  <div>
+                    <input
+                      className={fieldClass}
+                      value={targetValue}
+                      onChange={(event) => {
+                        setTargetValue(event.target.value);
+                        setTargetTouched(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTarget();
+                        }
+                      }}
+                      placeholder="src/components or dashboard cards"
+                    />
+                    {errors.targetValue && (
+                      <p className="mt-1 text-xs text-status-locked">
+                        {errors.targetValue}
+                      </p>
+                    )}
+                  </div>
+                  <button className={secondaryBtnClass} onClick={addTarget}>
+                    <Plus size={14} />
+                    Add
+                  </button>
+                </div>
+
+                {errors.targets && (
+                  <p className="mt-2 text-xs text-status-locked">
+                    {errors.targets}
+                  </p>
+                )}
+
+                {targets.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {targets.map((target) => (
+                      <div
+                        key={target.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-1 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                            {formatTargetType(target.type)}
+                          </p>
+                          <p className="truncate text-sm text-text-primary">
+                            {target.value}
+                          </p>
+                        </div>
+                        <button
+                          className={iconBtnClass}
+                          onClick={() => removeTarget(target.id)}
+                          title="Remove target"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {overlaps.length > 0 && (
-            <div className="p-4 rounded-2xl bg-status-dirty/10 border border-status-dirty/20 flex gap-3">
-              <AlertTriangle className="text-status-dirty shrink-0" size={18} />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-status-dirty">Potential Overlap</p>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  Teammates are already active in similar areas. Review before starting.
-                </p>
+            <div className="rounded-xl border border-status-dirty/40 bg-status-dirty/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle
+                  size={18}
+                  className="mt-0.5 shrink-0 text-status-dirty"
+                />
+                <div>
+                  <p className="text-sm font-medium text-status-dirty">
+                    This overlaps active work
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">
+                    Review this before starting. Axiom will not block you, but the team should know if two people touch the same area.
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {overlaps.map((overlap, index) => (
+                      <div
+                        key={`${overlap.sessionId}-${overlap.targetValue}-${index}`}
+                        className="flex flex-wrap items-start gap-2 text-sm text-text-secondary"
+                      >
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${overlapSeverityClass(overlap.severity)}`}
+                        >
+                          {overlapSeverityLabel(overlap.severity)}
+                        </span>
+                        <span>
+                          {overlap.reason}: {overlap.targetValue} in{" "}
+                          {overlap.sessionTitle}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
+        </div>
 
-          <div className="flex items-center gap-3 pt-4">
-            <button
-              className="flex-1 h-14 rounded-2xl bg-accent text-white font-bold hover:bg-accent-hover transition-all active:scale-[0.98] shadow-lg shadow-accent/20"
-              onClick={submit}
-            >
-              {overlaps.length > 0 && !hasConfirmedOverlap ? "Review overlap" : "Start Work"}
-            </button>
-            <button
-              className="h-14 px-6 rounded-2xl bg-surface-2 text-text-primary font-bold hover:bg-surface-3 transition-all"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
+          <button className={secondaryBtnClass} onClick={onClose}>
+            Cancel
+          </button>
+          <button className={primaryBtnClass} onClick={submit}>
+            {overlaps.length > 0 && !hasConfirmedOverlap
+              ? "Review Warning"
+              : overlaps.length > 0
+                ? "Start Anyway"
+              : "Start Work"}
+          </button>
         </div>
       </div>
     </div>

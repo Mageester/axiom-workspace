@@ -9,7 +9,7 @@ import type {
   WorkspaceEvent,
   WorkspaceEventType,
 } from "../types";
-import { isWorkCard, mergeCards } from "./board";
+import { mergeCards } from "./board";
 
 const SETUP_KEY = "axiom-workspace:setup-state";
 const IDENTITY_KEY = "axiom-workspace:device-identity";
@@ -86,8 +86,15 @@ function safeNow(): string {
 }
 
 function defaultDeviceName(): string {
-  const platform = navigator.platform?.trim();
-  return platform ? `Axiom ${platform}` : "Axiom Device";
+  let platform = "Device";
+  try {
+    if (navigator.userAgent.includes("Windows")) platform = "Win32";
+    else if (navigator.userAgent.includes("Mac")) platform = "Mac";
+    else if (navigator.userAgent.includes("Linux")) platform = "Linux";
+  } catch {
+    // userAgent unavailable
+  }
+  return `Axiom ${platform}`;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -550,7 +557,7 @@ export function buildSnapshotFromSessions(
     createdAt: safeNow(),
     createdByDeviceId: identity.deviceId,
     sessions: mergeSessions([], sessions),
-    cards: mergeCards([], cards.filter(isWorkCard)),
+    cards: mergeCards([], cards),
     eventsApplied: cleanEvents.map((event) => event.id),
   };
 }

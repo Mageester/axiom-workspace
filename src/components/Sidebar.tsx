@@ -11,13 +11,14 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { NavPage, SyncSettings, SyncStatus } from "../types";
-import axiomMark from "/axiom-mark.png";
+import axiomMark from "../../app-icon.png";
 
 const NAV_ITEMS: { id: NavPage; label: string; icon: ReactNode }[] = [
-  { id: "today", label: "Today", icon: <Home size={18} strokeWidth={2.5} /> },
-  { id: "projects", label: "Projects", icon: <GitFork size={18} strokeWidth={2.5} /> },
-  { id: "activity", label: "Activity", icon: <Activity size={18} strokeWidth={2.5} /> },
-  { id: "settings", label: "Settings", icon: <Settings size={18} strokeWidth={2.5} /> },
+  { id: "dashboard", label: "Home", icon: <Home size={18} /> },
+  { id: "sessions", label: "Work", icon: <Briefcase size={18} /> },
+  { id: "repos", label: "Repos", icon: <GitFork size={18} /> },
+  { id: "activity", label: "Activity", icon: <Activity size={18} /> },
+  { id: "settings", label: "Settings", icon: <Settings size={18} /> },
 ];
 
 interface SidebarProps {
@@ -88,49 +89,60 @@ export function Sidebar({
 }: SidebarProps) {
   const sync = syncPresentation(setupComplete, syncStatus);
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border/40 bg-surface-1">
-      <div className="px-6 py-8">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border/70 bg-surface-1/75 backdrop-blur-xl">
+      <div className="border-b border-border/70 px-5 py-5">
         <div className="flex items-center gap-3">
-          <img src={axiomMark} alt="" className="h-8 w-8 object-contain" aria-hidden="true" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-black/70 shadow-inner">
+            <img src={axiomMark} alt="" className="h-7 w-7 object-contain" aria-hidden="true" />
+          </div>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-bold tracking-tight text-text-primary uppercase tracking-[0.1em]">
-              Axiom
+            <h1 className="truncate text-sm font-semibold tracking-[0.01em] text-text-primary">
+              Axiom Workspace
             </h1>
+            <p className="mt-0.5 text-xs text-text-muted">Team coordination</p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 px-4 py-4 space-y-1">
-        {NAV_ITEMS.map((item) => {
-          const isActive = activeItem === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
-                isActive
-                  ? "bg-surface-2 text-text-primary"
-                  : "text-text-muted hover:text-text-secondary hover:bg-surface-2/40"
-              }`}
-            >
-              <span className={isActive ? "text-accent" : "text-text-muted opacity-50 group-hover:opacity-100"}>
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4">
+        <div className="space-y-1">
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeItem === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onNavigate(item.id)}
+                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? "bg-surface-3/90 text-text-primary shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
+                    : "text-text-secondary hover:bg-surface-2/80 hover:text-text-primary"
+                }`}
+              >
+                <span className={isActive ? "text-accent-hover" : "text-text-muted group-hover:text-text-secondary"}>
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+                {item.id === "sessions" && activeSessionCount > 0 && (
+                  <span className="ml-auto rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent-hover">
+                    {activeSessionCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="p-6">
-        <div className="rounded-2xl border border-border/40 bg-surface-2/30 p-4">
+      <div className="border-t border-border/70 p-4">
+        <div className="rounded-xl border border-border/70 bg-surface-0/65 p-3">
           <div className="flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 rounded-full ${sync.dot}`} />
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${sync.text}`}>
+            <span className={`h-2 w-2 rounded-full ${sync.dot}`} />
+            <span className={`flex items-center gap-1.5 text-xs font-semibold ${sync.text}`}>
+              {sync.icon}
               {sync.label}
             </span>
           </div>
-          <p className="mt-2 text-[11px] text-text-muted font-medium">
+          <p className="mt-2 text-xs text-text-muted">
             {setupComplete ? timeAgo(syncSettings?.lastSyncAt) : sync.detail}
           </p>
         </div>
